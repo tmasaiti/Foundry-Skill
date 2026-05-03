@@ -1,0 +1,1475 @@
+FOUNDRY IAM
+
+CUSTOM FEDERATION &
+
+BRING YOUR OWN IdP
+
+Feature Specification — Phase 2
+
+
+
+
+
+Document Type
+
+Feature Extension Spec
+
+Phase
+
+Phase 2 — Post-MVP
+
+Estimated Build
+
+7–10 engineering days
+
+Trigger
+
+Enterprise requiring SSO via existing Okta / Azure AD / Google
+
+Revenue Impact
+
+Required for enterprise SLA. Often the primary SSO requirement.
+
+Dependencies
+
+MVP platform live. SAML spec optional (SAML upstream requires SAML spec).
+
+
+
+This document specifies the Custom Federation and Bring Your Own IdP (BYO IdP) feature. It enables enterprise customers to connect their existing corporate Identity Provider (Okta, Azure AD / Entra ID, Google Workspace, or any OIDC/SAML upstream) to their Foundry IAM workspace, so their employees log in using company credentials rather than Foundry IAM-native accounts. An engineer receiving only this document should be able to implement this feature without access to other platform documentation.
+
+
+
+SECTION 1
+
+Concept — What Custom Federation Is
+
+
+
+
+
+1.1 The Problem It Solves
+
+Without federation, every user who needs access to a customer's application must be manually created in Foundry IAM (or via SCIM). For an enterprise with existing Okta or Azure AD, this creates a parallel identity store — users have two sets of credentials, two places to be deprovisioned, and two authentication experiences.
+
+
+
+With Custom Federation (BYO IdP), the customer connects their existing corporate IdP to their Foundry IAM workspace. Their employees then click 'Sign in with Acme Corp' on the Keycloak login page, are redirected to Okta/Azure AD for authentication, and returned to Keycloak with a trusted assertion. Keycloak creates a federated user record and issues its own OIDC tokens downstream. The customer's application never sees the upstream IdP — only Foundry IAM tokens.
+
+
+
+1.2 The Authentication Flow
+
+Without BYO IdP:
+
+  User → Keycloak login page → enter Foundry IAM password → JWT
+
+
+
+With BYO IdP (OIDC upstream — e.g. Google, Okta):
+
+  User → Keycloak login page → click 'Sign in with Acme Corp'
+
+    → Redirect to Okta (customer's IdP)
+
+      → User authenticates with Okta (existing credentials, MFA, etc.)
+
+        → Okta returns OIDC token to Keycloak
+
+          → Keycloak creates/updates federated user in realm
+
+            → Keycloak issues Foundry IAM JWT to customer application
+
+
+
+With BYO IdP (SAML upstream — e.g. Azure AD):
+
+  User → Keycloak login page → click 'Sign in with Acme Corp'
+
+    → Redirect to Azure AD (SAML AuthnRequest)
+
+      → User authenticates with Azure AD
+
+        → Azure AD returns SAML Assertion to Keycloak (Keycloak acts as SAML SP)
+
+          → Keycloak creates/updates federated user
+
+            → Keycloak issues Foundry IAM JWT to customer application
+
+
+
+1.3 Supported Upstream IdP Types
+
+Type
+
+Protocol
+
+Examples
+
+Keycloak Support
+
+Social / Pre-built
+
+OIDC
+
+Google, GitHub, Microsoft (personal), Facebook
+
+Built-in. Social provider config in Keycloak Admin.
+
+OIDC Enterprise
+
+OIDC / OpenID Connect
+
+Okta, Auth0, Ping Identity, any OIDC-compliant IdP
+
+Keycloak Identity Broker — generic OIDC.
+
+SAML Enterprise
+
+SAML 2.0
+
+Azure AD / Entra ID, Active Directory FS, Shibboleth, any SAML 2.0 IdP
+
+Keycloak Identity Broker — generic SAML.
+
+LDAP / Active Directory
+
+LDAP
+
+On-premise Active Directory, OpenLDAP
+
+Keycloak LDAP federation — different config, covered in Section 7.
+
+
+
+1.4 Keycloak's Role — Identity Brokering
+
+Keycloak's Identity Broker capability handles the upstream federation natively. Foundry IAM's work is building the management layer: the API to configure brokers, the portal UI for customers to add their IdP, and the control plane logic to store and manage configurations.
+
+
+
+Key Concept: Broker vs. Direct Federation
+
+Foundry IAM does NOT pass through authentication to the upstream IdP. Keycloak brokers the identity: it authenticates against the upstream, then issues its own JWT downstream. Customer applications always receive Foundry IAM tokens — they never need to know about the upstream IdP. This is the correct architecture and it is what makes the product vendor-neutral.
+
+
+
+
+
+SECTION 2
+
+Architecture — No New Services Required
+
+
+
+
+
+Custom federation requires no new services. Keycloak's Identity Broker is already in the platform. The work is: control plane API endpoints to manage broker configurations, portal UI pages for customers to configure their IdP, and the database tables to persist configurations outside of Keycloak.
+
+
+
+2.1 Identity Broker Configuration Flow
+
+Customer (portal admin):
+
+  Navigates to Workspace → Identity Providers → Add Provider
+
+  Selects: Google / Okta (OIDC) / Azure AD (SAML) / Custom OIDC / Custom SAML
+
+  Fills in required fields (varies by type — see Section 4)
+
+  Clicks 'Save and Test'
+
+    ↓
+
+Control Plane API:
+
+  POST /v1/workspaces/:id/identity-providers
+
+  Validates fields
+
+  Calls Keycloak Admin API to create Identity Provider in realm
+
+  Applies mappers (attribute mapping from upstream to Keycloak user profile)
+
+  Persists configuration to identity_providers table
+
+  Returns configuration + test URL
+
+    ↓
+
+Customer tests the flow:
+
+  Opens test URL in browser
+
+  Redirected to their IdP → authenticates → returns to Keycloak
+
+  Keycloak shows 'Link to existing account?' or creates federated user
+
+    ↓
+
+Configuration is live.
+
+Login page for this realm now shows the IdP button.
+
+
+
+2.2 How Federated Users Work in Keycloak
+
+Behaviour
+
+Details
+
+First login
+
+Keycloak creates a user record in the realm with the federated identity linked. Username is typically the upstream email or sub claim.
+
+Subsequent logins
+
+Keycloak recognises the federated identity link. No duplicate user created. Claims are refreshed from upstream.
+
+Local account linking
+
+If a user already has a Foundry IAM local account with the same email, Keycloak prompts to link the accounts. Configurable policy.
+
+User attributes
+
+Attribute mappers copy claims from the upstream token (email, name, groups) into Keycloak user profile. These appear in Foundry IAM JWTs.
+
+User management
+
+Federated users appear in the Keycloak users list. Their source is marked as the IdP alias. They can be manually disabled.
+
+Deprovisioning
+
+Foundry IAM does not auto-deprovision federated users when they leave the upstream IdP. SCIM (separate feature) handles automated deprovisioning.
+
+
+
+
+
+SECTION 3
+
+Data Model
+
+
+
+
+
+3.1 New Table: identity_providers
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+id
+
+VARCHAR(26)
+
+PK
+
+ULID — prefix idp_
+
+workspace_id
+
+VARCHAR(26)
+
+FK → workspaces.id, NOT NULL
+
+
+
+alias
+
+VARCHAR(64)
+
+NOT NULL
+
+Unique within realm. URL-safe slug. Used by Keycloak internally.
+
+display_name
+
+VARCHAR(255)
+
+NOT NULL
+
+Shown on login button: 'Sign in with Acme Corp'
+
+type
+
+VARCHAR(32)
+
+NOT NULL
+
+oidc | saml | google | github | microsoft | ldap
+
+enabled
+
+BOOLEAN
+
+NOT NULL, DEFAULT true
+
+
+
+hide_on_login_page
+
+BOOLEAN
+
+NOT NULL, DEFAULT false
+
+True = only usable via email domain routing
+
+keycloak_alias
+
+VARCHAR(64)
+
+NOT NULL, UNIQUE
+
+Alias used in Keycloak. Usually same as alias.
+
+config_encrypted
+
+TEXT
+
+NOT NULL
+
+AES-256 encrypted JSON of full IdP config (client secrets etc.)
+
+attribute_mappers
+
+JSONB
+
+NOT NULL, DEFAULT '[]'
+
+Array of attribute mapping rules
+
+domain_hints
+
+TEXT[]
+
+NOT NULL, DEFAULT '{}'
+
+Email domains that auto-route to this IdP: ['acme.com']
+
+first_login_flow
+
+VARCHAR(64)
+
+NOT NULL, DEFAULT first broker login
+
+Keycloak flow alias for first-login behaviour
+
+sync_mode
+
+VARCHAR(32)
+
+NOT NULL, DEFAULT inherit
+
+inherit | legacy | force — how often attributes refreshed
+
+created_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+updated_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+
+
+3.2 Sensitive Config — Encryption
+
+IdP configurations include client secrets (OIDC) and signing certificates (SAML). These must never be stored in plaintext. The config_encrypted column stores AES-256-GCM encrypted JSON.
+
+
+
+// Example decrypted content of config_encrypted (OIDC type)
+
+{
+
+  "authorization_url": "https://acme.okta.com/oauth2/v1/authorize",
+
+  "token_url": "https://acme.okta.com/oauth2/v1/token",
+
+  "user_info_url": "https://acme.okta.com/oauth2/v1/userinfo",
+
+  "jwks_url": "https://acme.okta.com/oauth2/v1/keys",
+
+  "client_id": "0oa1abc2defGHIJK",
+
+  "client_secret": "super_secret_value",
+
+  "scopes": ["openid", "profile", "email", "groups"],
+
+  "issuer": "https://acme.okta.com"
+
+}
+
+
+
+// Example decrypted content (SAML type)
+
+{
+
+  "single_sign_on_service_url": "https://acme.okta.com/app/saml/sso",
+
+  "single_logout_service_url": "https://acme.okta.com/app/saml/slo",
+
+  "idp_entity_id": "http://www.okta.com/exk1abc2def",
+
+  "signing_certificate": "MIIC...base64...",
+
+  "name_id_policy_format": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+
+  "want_assertions_signed": true,
+
+  "validate_signature": true
+
+}
+
+
+
+3.3 Attribute Mapper JSON Structure
+
+// attribute_mappers column
+
+[
+
+  {
+
+    "id": "map_email",
+
+    "mapper_type": "oidc-user-attribute-idp-mapper",
+
+    "upstream_claim": "email",
+
+    "user_attribute": "email",
+
+    "sync_mode": "inherit"
+
+  },
+
+  {
+
+    "id": "map_firstname",
+
+    "mapper_type": "oidc-user-attribute-idp-mapper",
+
+    "upstream_claim": "given_name",
+
+    "user_attribute": "firstName",
+
+    "sync_mode": "inherit"
+
+  },
+
+  {
+
+    "id": "map_groups",
+
+    "mapper_type": "oidc-role-idp-mapper",
+
+    "upstream_claim": "groups",
+
+    "role": "tenant_admin",
+
+    "claim_value": "foundry-admins",
+
+    "sync_mode": "force"
+
+  }
+
+]
+
+
+
+
+
+SECTION 4
+
+API Contract — New Endpoints
+
+
+
+
+
+Method
+
+Path
+
+Description
+
+POST
+
+/v1/workspaces/:id/identity-providers
+
+Register a new IdP (OIDC, SAML, or social)
+
+GET
+
+/v1/workspaces/:id/identity-providers
+
+List all configured IdPs for workspace
+
+GET
+
+/v1/workspaces/:id/identity-providers/:idpId
+
+Get IdP configuration (secrets redacted)
+
+PATCH
+
+/v1/workspaces/:id/identity-providers/:idpId
+
+Update IdP configuration
+
+DELETE
+
+/v1/workspaces/:id/identity-providers/:idpId
+
+Remove IdP from realm
+
+POST
+
+/v1/workspaces/:id/identity-providers/:idpId/enable
+
+Enable IdP
+
+POST
+
+/v1/workspaces/:id/identity-providers/:idpId/disable
+
+Disable IdP (button hidden from login page)
+
+GET
+
+/v1/workspaces/:id/identity-providers/:idpId/test-url
+
+Get URL to initiate a test authentication flow
+
+POST
+
+/v1/workspaces/:id/identity-providers/:idpId/mappers
+
+Add attribute mapper to IdP
+
+GET
+
+/v1/workspaces/:id/identity-providers/:idpId/mappers
+
+List attribute mappers
+
+PATCH
+
+/v1/workspaces/:id/identity-providers/:idpId/mappers/:mapperId
+
+Update attribute mapper
+
+DELETE
+
+/v1/workspaces/:id/identity-providers/:idpId/mappers/:mapperId
+
+Remove attribute mapper
+
+GET
+
+/v1/workspaces/:id/identity-providers/callback-url
+
+Get the Keycloak callback URL for this workspace (given to the upstream IdP)
+
+
+
+4.1 POST /v1/workspaces/:id/identity-providers — Request Shapes
+
+OIDC Enterprise (Okta, Auth0, any OIDC)
+
+{
+
+  "alias": "acme-okta",
+
+  "display_name": "Sign in with Acme Corp",
+
+  "type": "oidc",
+
+  "config": {
+
+    "authorization_url": "https://acme.okta.com/oauth2/v1/authorize",
+
+    "token_url": "https://acme.okta.com/oauth2/v1/token",
+
+    "user_info_url": "https://acme.okta.com/oauth2/v1/userinfo",
+
+    "jwks_url": "https://acme.okta.com/oauth2/v1/keys",
+
+    "issuer": "https://acme.okta.com",
+
+    "client_id": "0oa1abc2defGHIJK",
+
+    "client_secret": "super_secret",
+
+    "scopes": ["openid", "profile", "email", "groups"],
+
+    "pkce": true
+
+  },
+
+  "domain_hints": ["acme.com"],
+
+  "hide_on_login_page": false,
+
+  "attribute_mappers": [
+
+    { "upstream_claim": "email", "user_attribute": "email" },
+
+    { "upstream_claim": "given_name", "user_attribute": "firstName" },
+
+    { "upstream_claim": "family_name", "user_attribute": "lastName" }
+
+  ]
+
+}
+
+
+
+SAML Enterprise (Azure AD, ADFS)
+
+{
+
+  "alias": "acme-azure",
+
+  "display_name": "Sign in with Acme Corp",
+
+  "type": "saml",
+
+  "config": {
+
+    "single_sign_on_service_url": "https://login.microsoftonline.com/{tenant}/saml2",
+
+    "single_logout_service_url": "https://login.microsoftonline.com/{tenant}/saml2",
+
+    "idp_entity_id": "https://sts.windows.net/{tenant}/",
+
+    "signing_certificate": "MIIC...base64...",
+
+    "name_id_policy_format": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+
+    "want_assertions_signed": true,
+
+    "validate_signature": true,
+
+    "sign_sp_metadata": false
+
+  },
+
+  "domain_hints": ["acme.com"],
+
+  "attribute_mappers": [
+
+    { "upstream_claim": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "user_attribute": "email" },
+
+    { "upstream_claim": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname", "user_attribute": "firstName" }
+
+  ]
+
+}
+
+
+
+Google / GitHub (Social — simplified)
+
+// Google
+
+{
+
+  "alias": "google",
+
+  "display_name": "Sign in with Google",
+
+  "type": "google",
+
+  "config": {
+
+    "client_id": "GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+
+    "client_secret": "GOOGLE_CLIENT_SECRET",
+
+    "hosted_domain": "acme.com"
+
+  }
+
+}
+
+
+
+// GitHub
+
+{
+
+  "alias": "github",
+
+  "display_name": "Sign in with GitHub",
+
+  "type": "github",
+
+  "config": {
+
+    "client_id": "GITHUB_CLIENT_ID",
+
+    "client_secret": "GITHUB_CLIENT_SECRET",
+
+    "organization": "acme-corp"
+
+  }
+
+}
+
+
+
+4.2 POST /v1/workspaces/:id/identity-providers — Response
+
+// Response 201
+
+{
+
+  "identity_provider": {
+
+    "id": "idp_3f8b1c",
+
+    "workspace_id": "wsp_c91b12",
+
+    "alias": "acme-okta",
+
+    "display_name": "Sign in with Acme Corp",
+
+    "type": "oidc",
+
+    "enabled": true,
+
+    "domain_hints": ["acme.com"],
+
+    "callback_url": "https://id.foundry-iam.com/realms/tnt_2f8a1d/broker/acme-okta/endpoint",
+
+    "created_at": "2026-02-28T12:00:00Z"
+
+  },
+
+  "setup": {
+
+    "callback_url": "https://id.foundry-iam.com/realms/tnt_2f8a1d/broker/acme-okta/endpoint",
+
+    "redirect_uri": "https://id.foundry-iam.com/realms/tnt_2f8a1d/broker/acme-okta/endpoint",
+
+    "test_url": "https://id.foundry-iam.com/realms/tnt_2f8a1d/broker/acme-okta/login"
+
+  }
+
+}
+
+
+
+4.3 GET /v1/workspaces/:id/identity-providers/callback-url
+
+This is what customers need to give to their upstream IdP as the redirect/callback URI. Must be prominently displayed in the portal immediately after IdP creation.
+
+
+
+// Response 200
+
+{
+
+  "workspace_id": "wsp_c91b12",
+
+  "callback_urls": {
+
+    "oidc": "https://id.foundry-iam.com/realms/tnt_2f8a1d/broker/{alias}/endpoint",
+
+    "saml_acs": "https://id.foundry-iam.com/realms/tnt_2f8a1d/broker/{alias}/endpoint",
+
+    "saml_sp_metadata": "https://id.foundry-iam.com/realms/tnt_2f8a1d/broker/{alias}/endpoint/descriptor"
+
+  },
+
+  "note": "Replace {alias} with your IdP alias. Register the callback_url in your upstream IdP application settings."
+
+}
+
+
+
+SECTION 5
+
+Keycloak Admin API Operations
+
+
+
+
+
+When the control plane receives an identity provider registration request, the following Keycloak Admin API calls are made. The control plane translates between Foundry IAM's simplified config model and Keycloak's full identity provider representation.
+
+
+
+5.1 OIDC IdP Registration Sequence
+
+Step
+
+Keycloak Admin API Call
+
+Notes
+
+1
+
+POST /admin/realms/{realm}/identity-provider/instances
+
+Create IdP with providerId=oidc and all config attributes
+
+2
+
+POST /admin/realms/{realm}/identity-provider/instances/{alias}/mappers (per mapper)
+
+Create attribute mappers from attribute_mappers array
+
+3
+
+GET /admin/realms/{realm}/identity-provider/instances/{alias}
+
+Verify creation and retrieve internal ID
+
+4
+
+Encrypt and store
+
+Encrypt full config with AES-256-GCM and store in identity_providers table
+
+
+
+5.2 SAML IdP Registration Sequence
+
+Step
+
+Keycloak Admin API Call
+
+Notes
+
+1
+
+POST /admin/realms/{realm}/identity-provider/instances
+
+Create IdP with providerId=saml
+
+2
+
+Set SAML-specific attributes
+
+signingCertificate, singleSignOnServiceUrl, validateSignature, nameIDPolicyFormat, wantAssertionsSigned
+
+3
+
+Create mappers
+
+SAML attribute mappers translate XML attribute names to KC user attributes
+
+4
+
+GET .../descriptor
+
+Retrieve SP metadata for display in portal (for customer to give to their IdP)
+
+
+
+5.3 Keycloak Identity Provider Config Object (OIDC)
+
+// Keycloak representation sent to POST /admin/realms/{realm}/identity-provider/instances
+
+{
+
+  "alias": "acme-okta",
+
+  "displayName": "Sign in with Acme Corp",
+
+  "providerId": "oidc",
+
+  "enabled": true,
+
+  "trustEmail": false,
+
+  "storeToken": false,
+
+  "addReadTokenRoleOnCreate": false,
+
+  "authenticateByDefault": false,
+
+  "firstBrokerLoginFlowAlias": "first broker login",
+
+  "postBrokerLoginFlowAlias": "",
+
+  "config": {
+
+    "authorizationUrl": "https://acme.okta.com/oauth2/v1/authorize",
+
+    "tokenUrl": "https://acme.okta.com/oauth2/v1/token",
+
+    "userInfoUrl": "https://acme.okta.com/oauth2/v1/userinfo",
+
+    "jwksUrl": "https://acme.okta.com/oauth2/v1/keys",
+
+    "issuer": "https://acme.okta.com",
+
+    "clientId": "0oa1abc2defGHIJK",
+
+    "clientSecret": "super_secret",
+
+    "defaultScope": "openid profile email groups",
+
+    "pkceEnabled": "true",
+
+    "pkceMethod": "S256",
+
+    "validateSignature": "true",
+
+    "syncMode": "INHERIT"
+
+  }
+
+}
+
+
+
+SECTION 6
+
+Portal UI — Identity Provider Management
+
+
+
+
+
+6.1 New Portal Routes
+
+Route
+
+Page
+
+Purpose
+
+/identity-providers
+
+IdPList.tsx
+
+List configured IdPs, enable/disable toggles
+
+/identity-providers/new
+
+IdPNew.tsx
+
+Add new IdP — provider type selection + configuration form
+
+/identity-providers/:id
+
+IdPDetail.tsx
+
+IdP config view/edit, attribute mappers, test flow, callback URLs
+
+
+
+6.2 Add Identity Provider Flow (IdPNew.tsx) — UX Spec
+
+The provider selection step is critical UX. Show tiles/cards, not a dropdown. Visual recognition of logos (Okta, Azure AD, Google, GitHub) dramatically reduces configuration errors and support tickets.
+
+
+
+Step 1 — Provider Selection: Show provider tiles with logos and labels: 'Okta', 'Azure AD', 'Google Workspace', 'GitHub', 'Generic OIDC', 'Generic SAML'. Single click to proceed.
+
+Step 2 — Configuration Form: Fields vary by provider type. For known providers (Okta, Google), show only the minimum required fields and auto-populate known URLs. For Generic OIDC/SAML, show all fields.
+
+Step 3 — Callback URL Display: Before saving, show the callback URL the customer must register in their upstream IdP. Show a 'I have registered this URL in my IdP' checkbox. Warn clearly that if this step is skipped, the integration will fail.
+
+Step 4 — Attribute Mapper Defaults: Apply default mappers for the provider type (email, firstName, lastName). Show them as editable. Add mapper button for custom claims.
+
+Step 5 — Save and Test: Save button provisions the IdP. On success, show 'Test this configuration' button that opens the test URL in a new tab.
+
+
+
+6.3 Provider-Specific Form Fields
+
+Provider
+
+Required Fields (auto-populated where possible)
+
+Notes
+
+Google Workspace
+
+Client ID, Client Secret, Hosted Domain (restrict to company email)
+
+Consent screen setup in Google Cloud Console. Callback URL to add: shown in Step 3.
+
+GitHub
+
+Client ID, Client Secret, Organization (optional — restrict to org members)
+
+OAuth App in GitHub Settings. Callback URL required.
+
+Okta
+
+Okta Domain (e.g. acme.okta.com), Client ID, Client Secret — all other URLs auto-derived from domain
+
+System apps → Create App Integration → OIDC → Web App. Add callback URL.
+
+Azure AD / SAML
+
+Tenant ID (auto-derives SAML URLs), Signing Certificate, NameID format
+
+Azure Portal → Enterprise Applications → New → Non-gallery → SAML. Use SP metadata URL.
+
+Generic OIDC
+
+Authorization URL, Token URL, UserInfo URL, JWKS URL, Client ID, Client Secret, Scopes
+
+Full manual config. Point to upstream .well-known/openid-configuration for URL hints.
+
+Generic SAML
+
+SSO URL, SLO URL (optional), IdP Entity ID, Signing Certificate
+
+Upload IdP metadata XML to auto-populate, or enter manually.
+
+
+
+6.4 IdP Detail Page — UX Spec
+
+Header: Provider logo + display name + alias + status badge (Active/Disabled). Enable/Disable toggle.
+
+Callback URLs section: Prominently displayed. Copy button. Provider-specific instructions (e.g. 'Add this as a redirect URI in your Okta App Settings').
+
+Test section: 'Test authentication' button. Opens test URL in new browser tab. On return, show last test result timestamp and success/error.
+
+Configuration section: Redacted config display (client_secret shown as *** with 'Update' button). All non-secret fields editable inline.
+
+Attribute Mappers section: Table of upstream claim → Foundry IAM user attribute mappings. Add/edit/delete rows. Save button.
+
+Domain Routing section: List of email domains (e.g. acme.com). Users with matching email domain automatically redirected to this IdP at login. Add/remove domains.
+
+Danger zone: Delete IdP. Warns that federated users will lose SSO and may be unable to login. Requires typing IdP alias to confirm.
+
+
+
+SECTION 7
+
+LDAP / Active Directory Federation
+
+
+
+
+
+Scope Note
+
+LDAP federation is architecturally different from OIDC/SAML brokering. It requires network connectivity from Keycloak to the customer's LDAP server, which is complex in a hosted SaaS context. This section specifies LDAP support but marks it as a gated feature (Enterprise plan only) due to the operational complexity.
+
+
+
+7.1 What LDAP Federation Provides
+
+Users in the customer's on-premise Active Directory or OpenLDAP can authenticate against Foundry IAM without being migrated
+
+Keycloak reads user attributes directly from LDAP on login
+
+Group membership in LDAP can be synchronised to Keycloak groups
+
+Passwords are validated against LDAP — Foundry IAM never stores the LDAP password
+
+
+
+7.2 Network Requirement — Why This Is Gated
+
+Keycloak must be able to establish a TCP connection to the customer's LDAP server (typically port 389 for LDAP or 636 for LDAPS). In a hosted SaaS, this means the customer must either:
+
+
+
+Option A: Expose their LDAP/LDAPS server publicly with IP allowlist (Foundry IAM egress IP). High security risk — strongly discourage.
+
+Option B: VPN or private link between Foundry IAM infrastructure and customer network. Operationally complex, customer-specific engineering.
+
+Option C: Customer deploys Keycloak on their own infrastructure (BYOK — Bring Your Own Keycloak). Not applicable to the hosted SaaS.
+
+Option D: Customer migrates to cloud-hosted LDAP (Azure AD DS, AWS Directory Service). Then LDAPS is reachable via LDAPS URL.
+
+
+
+Recommendation
+
+For Phase 2, LDAP is documented but not actively sold. When a customer requests it, assess which option is feasible for their environment and flag as a custom implementation engagement. LDAP over public internet without VPN should be refused on security grounds.
+
+
+
+7.3 LDAP Configuration Table (for future implementation)
+
+Column
+
+Type
+
+Notes
+
+connection_url
+
+TEXT
+
+ldap://host:389 or ldaps://host:636
+
+bind_dn
+
+TEXT
+
+Service account DN: CN=foundry-sync,CN=Users,DC=acme,DC=com
+
+bind_credential_encrypted
+
+TEXT
+
+AES-256 encrypted service account password
+
+user_dn
+
+TEXT
+
+Base DN for user search: CN=Users,DC=acme,DC=com
+
+user_object_classes
+
+TEXT
+
+Comma-separated: person,organizationalPerson,user
+
+username_ldap_attribute
+
+TEXT
+
+sAMAccountName (AD) or uid (OpenLDAP)
+
+rdn_ldap_attribute
+
+TEXT
+
+cn
+
+uuid_ldap_attribute
+
+TEXT
+
+objectGUID (AD) or entryUUID (OpenLDAP)
+
+search_scope
+
+VARCHAR
+
+ONE_LEVEL or SUBTREE
+
+connection_timeout_ms
+
+INTEGER
+
+Default 5000
+
+read_timeout_ms
+
+INTEGER
+
+Default 10000
+
+sync_registrations
+
+BOOLEAN
+
+Allow new users registered in Foundry IAM to be written back to LDAP
+
+import_enabled
+
+BOOLEAN
+
+Import LDAP users into Keycloak DB on first login
+
+
+
+SECTION 8
+
+Email Domain Routing (Home Realm Discovery)
+
+
+
+
+
+Home Realm Discovery allows Foundry IAM to automatically redirect a user to the correct IdP based on their email address domain, without the user having to manually select their provider. This is essential for enterprise SSO UX.
+
+
+
+8.1 How It Works
+
+User enters email: jane@acme.com on the Keycloak login page
+
+  ↓
+
+Keycloak checks if any IdP has 'acme.com' in domain_hints
+
+  ↓ (match found: acme-okta IdP)
+
+User is automatically redirected to Okta without seeing the Foundry IAM password field
+
+  ↓
+
+User authenticates with Okta → returns to Keycloak → JWT issued
+
+
+
+No match: user sees Foundry IAM login form (password or social buttons)
+
+
+
+8.2 Configuration
+
+Domain hints are stored in the identity_providers.domain_hints array and must be synced to Keycloak's Identity Provider hintedDomain attribute. This is set during IdP creation and updated via PATCH.
+
+
+
+8.3 Conflict Detection
+
+Validation Rule
+
+Two IdPs in the same workspace cannot claim the same email domain. The control plane must validate uniqueness of domain hints within a workspace before registering. Return 409 with error code domain_already_claimed if a conflict is detected.
+
+
+
+SECTION 9
+
+Test Matrix
+
+
+
+
+
+Test ID
+
+Scenario
+
+Expected Result
+
+FED-001
+
+Register OIDC IdP (Okta) with valid config
+
+201, IdP visible in Keycloak Admin, callback URL returned
+
+FED-002
+
+Register SAML IdP (Azure AD) with valid config
+
+201, IdP visible in Keycloak Admin with SAML attributes
+
+FED-003
+
+Register Google social IdP
+
+201, Google sign-in button appears on realm login page
+
+FED-004
+
+OIDC login flow end-to-end (test Okta)
+
+User redirected to Okta, authenticates, returns with Foundry IAM JWT
+
+FED-005
+
+SAML login flow end-to-end (test Azure AD)
+
+User redirected to Azure AD, SAML assertion processed, JWT issued
+
+FED-006
+
+Email domain routing — acme.com auto-routes to Okta
+
+User entering acme.com email redirected to Okta without password field
+
+FED-007
+
+Duplicate domain hint in same workspace
+
+409 with error code domain_already_claimed
+
+FED-008
+
+Attribute mapping — email synced from upstream
+
+Federated user's Keycloak email matches upstream IdP email claim
+
+FED-009
+
+Attribute mapping — role mapper assigns tenant_admin based on group claim
+
+User with 'foundry-admins' group in Okta gets tenant_admin role in Keycloak
+
+FED-010
+
+Disable IdP — login button removed
+
+IdP button no longer appears on realm login page. Existing federated sessions unaffected until expiry.
+
+FED-011
+
+Delete IdP — federated users retain record but cannot SSO
+
+IdP removed from Keycloak. scim_users or KC users with link still exist but link is broken.
+
+FED-012
+
+Update client secret — new secret applied to Keycloak
+
+Subsequent OIDC flows use new secret. Old secret no longer valid with upstream.
+
+FED-013
+
+SAML SP metadata URL returns valid XML
+
+GET .../descriptor returns parseable SAML metadata with correct entityID
+
+FED-014
+
+Tenant isolation — IdP in workspace A not visible from workspace B
+
+IdP list for workspace B is empty / does not include A's IdP
+
+FED-015
+
+Test URL for OIDC IdP initiates auth flow
+
+Browser redirect to upstream IdP login
+
+FED-016
+
+Register IdP with duplicate alias in same workspace
+
+409 with error code alias_already_exists
+
+
+
+9.1 Recommended Test Tooling
+
+Tool
+
+Purpose
+
+Okta Developer Account
+
+Free. Create OIDC app, point redirect URI to local Keycloak via ngrok. Full real OIDC test.
+
+Azure AD Free Tenant
+
+Free Microsoft account. Create Enterprise App with SAML for real SAML brokering test.
+
+Google Cloud Console
+
+Free tier. Create OAuth2 credentials for Google social IdP test.
+
+Mock OIDC server (node-oidc-provider)
+
+Docker-based mock OIDC server for offline testing without external accounts.
+
+ngrok
+
+Required to expose local Keycloak realm to external IdPs for callback during testing.
+
+Keycloak Identity Broker UI
+
+Admin Console → Identity Providers. Use to verify configurations are correctly applied after control plane API calls.
+
+
+
+SECTION 10
+
+Implementation Plan — 10 Days
+
+
+
+
+
+Day
+
+Focus
+
+Deliverable
+
+Day 1
+
+Research + DB setup
+
+identity_providers table migrated. Keycloak Admin API tested manually for OIDC and SAML IdP creation. Postman collection.
+
+Day 2
+
+Control plane — OIDC IdP registration
+
+POST /v1/workspaces/:id/identity-providers for OIDC type. Okta integration manually verified via Keycloak Admin Console.
+
+Day 3
+
+Control plane — SAML IdP registration
+
+SAML type support added to same endpoint. Azure AD test via SAML.
+
+Day 4
+
+Social providers + callback URL endpoint
+
+Google and GitHub types. GET callback-url endpoint. Encrypted config storage.
+
+Day 5
+
+Attribute mapper CRUD endpoints
+
+POST, GET, PATCH, DELETE for mappers. Default mapper application at IdP registration.
+
+Day 6
+
+Enable/disable + test URL + list/get/patch/delete
+
+All remaining endpoints. Domain hint uniqueness validation.
+
+Day 7
+
+Portal UI — IdP list + provider selection
+
+IdPList.tsx and provider tile selection step in IdPNew.tsx.
+
+Day 8
+
+Portal UI — configuration forms per provider
+
+All 6 provider-specific forms. Callback URL display step. Mapper editor.
+
+Day 9
+
+Portal UI — IdP detail + domain routing
+
+IdPDetail.tsx complete. Domain hint editor. Test button.
+
+Day 10
+
+End-to-end tests + documentation
+
+Full test matrix executed with real Okta and Azure AD. Docs updated with per-provider setup guides.
+
+
+
+Phase 2 Complete
+
+When SAML, SCIM, and Custom Federation are all shipped, the Foundry IAM platform matches or exceeds Auth0's enterprise feature set at a fraction of the operating cost. These three features together are the difference between a startup product and an enterprise product.
+
+
+
+End of Custom Federation & BYO IdP Specification

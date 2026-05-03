@@ -1,0 +1,1054 @@
+UI/UX WORKING DOCTRINE
+
+Product Design & Engineering Standards
+
+VERSION 1.1 — AMENDED EDITION
+
+
+
+
+EMPLOYEE ONBOARDING — DESIGN & ENGINEERING
+
+Mandatory standards for all product design and engineering work.
+
+Issued by: Office of the CTO  |  Original: March 2026  |  Amended: April 2026
+
+
+
+AMENDMENT NOTICE
+
+v1.1 incorporates mandatory amendments following independent review dated 12 April 2026. Changes address: enforcement protocol (new Section 11), engineering integration requirements (new Section 12), measurable criteria added to all eight principles, revision of Section 3A from absolute ban to conditional guidance, removal of the 'AI-generated sameness' anti-pattern, addition of accessibility and mobile scope requirements. A full change log appears at Appendix B. Sections commended by the review (Founding Principle, Sections 2, 4, 5) remain intact.
+
+
+
+Prepared by: Tawanda Masaiti
+
+Contact: tmasaiti@gmail.com  |  0772 209 275
+
+Version 1.1  |  April 2026  |  Review Cycle: Monthly through v1.3, then Quarterly
+
+CONFIDENTIAL — Internal Use Only
+
+
+
+
+Preamble
+
+
+
+
+This document formalises the UI/UX standards that govern all product design and engineering work. It is not a style guide. It is not a preference document. It is an operational doctrine — and adherence to it is mandatory for every member of the design and engineering team.
+
+
+
+The doctrine exists because of a recurring failure mode in product work: interfaces that look correct but do not behave correctly. Screens are polished. Workflows are hidden. Business rules are discovered through error messages. Users are left to guess what the system is enforcing and who is responsible for what.
+
+
+
+That stops now.
+
+
+
+FOUNDING PRINCIPLE
+
+"The interface must make workflow visible."
+
+The goal is not to make software attractive. The goal is to make software intuitive, self-teaching, operationally truthful, and behaviourally clear.
+
+
+
+1. The Core Problem We Are Solving
+
+
+
+
+Most weak UI is built as if software is a collection of screens. We must build software as a collection of stateful human workflows. That distinction changes everything about how we design and build.
+
+
+
+A screen that looks finished but hides the process it governs is not finished. It is broken in a way that is harder to detect and far more expensive to fix than a visual defect. The damage shows up in user error, support overhead, operational failure, and institutional mistrust of the product.
+
+
+
+Every record, every screen, and every interaction must account for the following questions:
+
+
+
+Design Concern
+
+What the UI Must Answer
+
+Records & their lineage
+
+Where did this come from? What does it affect? What chain does it belong to?
+
+Transitions & approvals
+
+What moves this forward? Who is authorised to move it? What happens when they do?
+
+Exceptions & blockers
+
+What is preventing progress? What would unblock it? Who owns resolution?
+
+Dependencies
+
+What must be true before this action is allowed? Is that visible before the user tries?
+
+Business rules
+
+What is the system enforcing? Is it communicated before the user hits an error?
+
+Responsibility
+
+Who acts next — the current user, another actor, or the system? Is the wait explained?
+
+
+
+2. The Eight Foundational Principles
+
+
+
+
+These eight principles are non-negotiable. They apply to every screen we ship. A submission that violates any of these will be returned for revision. Each principle now carries a measurable criterion — a binary, observable test that removes subjectivity from review.
+
+
+
+1
+
+Workflow over decoration
+
+A screen is successful when the user can understand the process and move it forward with confidence. Polish matters — but only after workflow clarity is achieved. No more clean dashboards hiding critical process.
+
+✓
+
+MEASURABLE CRITERION  A new user with no briefing can identify the next required action from the screen alone. Tested by walkthrough before design sign-off.
+
+
+
+2
+
+Business rules must be visible
+
+If the system enforces rules — approvals, thresholds, restrictions, permissions — the UI must communicate them before the user hits an error. Users must always be able to see what is allowed, what is blocked, why it is blocked, and what would unblock it.
+
+✓
+
+MEASURABLE CRITERION  Every blocking rule can be read on-screen before the user attempts the blocked action. Zero rules discoverable only through error messages.
+
+
+
+3
+
+The system should teach itself
+
+A good UI reduces the need for external training. It names things clearly, groups actions to match real mental models, explains consequences before commitment, and signals status and next steps without documentation. Users should feel the system helps them think — not punishes them for not already knowing it.
+
+✓
+
+MEASURABLE CRITERION  A new hire with no product training can complete the primary workflow without asking a colleague. Validated against each major workflow quarterly.
+
+
+
+4
+
+Status is not decoration
+
+Status indicators are operational signals, not cosmetic labels. Every important entity must communicate its state clearly. Status must be visually obvious, semantically precise, consistent product-wide, and tied to allowed actions. A badge without workflow consequences is just paint.
+
+✓
+
+MEASURABLE CRITERION  Every status value changes at least one of: visible actions, button state, colour treatment, or warning text. Any status that changes none of these is invalid.
+
+
+
+5
+
+Records must show lineage
+
+Every major record must answer: what created it, what it is linked to, what depends on it, what came before, and what can happen next. This is how the product earns operational trust from the people who use it every day.
+
+✓
+
+MEASURABLE CRITERION  Every major record displays its origin, at least one upstream link, and its downstream consequence. Records with no lineage visible do not pass review.
+
+
+
+6
+
+Show responsibility clearly
+
+For every workflow state, the UI must make it obvious who owns the next move. If something is stalled, the screen must explain whether the delay belongs to the current user, another actor, the system, or an unmet dependency.
+
+✓
+
+MEASURABLE CRITERION  'Waiting on me' states are visually distinct from 'waiting on someone else' states. A reviewer must be able to identify the next actor without opening a detail view.
+
+
+
+7
+
+Respect formal process — do not hide it
+
+Where the domain involves authorisations, approvals, audit trails, receipts, or institutional handoffs, the UI must visually acknowledge those structures. Users should feel the system understands how their organisation actually operates.
+
+✓
+
+MEASURABLE CRITERION  Any screen involving a multi-party process shows the process chain — not only the current step. Institutional roles must be named, not implied.
+
+
+
+8
+
+Every screen must answer five questions
+
+What am I looking at? What state is it in? What matters most right now? What can I do next? What happens if I do it? — If a screen cannot answer all five without friction, it is not finished.
+
+✓
+
+MEASURABLE CRITERION  A documented five-question walkthrough exists for every screen before submission. Any unanswered question is a rejection. No exceptions.
+
+
+
+3. Interface Design Rules — Effective Immediately
+
+
+
+
+The following rules govern all design and engineering decisions on every product screen. They are not suggestions. They cannot be traded off against delivery pressure.
+
+
+
+3A — Justify Every Pattern Against the Workflow
+
+▲
+
+AMENDED IN v1.1 — Section 3A previously contained absolute bans on specific UI patterns. Following independent review, this has been revised to conditional guidance. The problem was never the pattern itself — it was patterns applied without justification. The standard is now: every structural choice must be justified against the workflow it serves.
+
+
+
+Cards, filters, tables, forms, and chart components are not inherently wrong. They are wrong when applied without justification. Before using any structural pattern, the designer must answer: does this pattern help the user understand state, identify exceptions, and act on what matters most?
+
+
+
+Apply the following conditional test to each pattern:
+
+
+
+Pattern
+
+Acceptable When
+
+Not Acceptable When
+
+Card layout
+
+Urgency or state variance across items is minimal; all items are genuinely equal in operational priority.
+
+Items have different states, urgency, or risk levels that a card layout obscures by treating them as visually equal.
+
+Chart / visualisation
+
+The chart reveals a trend or ratio that directly leads the user to an action or decision.
+
+The chart summarises data with no path to intervention — 'interesting but useless' data displays.
+
+Filter controls
+
+Filters reflect operational categories (by state, owner, urgency, exception type).
+
+Filters reflect only alphabetical or date-based defaults with no workflow relevance.
+
+Table / list view
+
+Rows show state, owner, exceptions, and risk alongside name — helping users identify what needs attention.
+
+Rows show only name and date, reducing a workflow surface to an archive.
+
+Inline form
+
+The form is the action; context is clear; consequences are shown before commit.
+
+The form appears without explaining what it creates, who is affected, or what cannot be undone.
+
+
+
+3B — Surface Next Actions Near the Current State
+
+The UI must not force users to hunt for the next move. Action placement must follow responsibility and timing — not visual symmetry or layout convention. The action the user most needs right now must be reachable from where they already are.
+
+
+
+CORRECT PATTERN
+
+A record pending approval shows Approve and Reject actions — with authority context — directly in the detail view. An overdue item shows Send Reminder and Record Payment directly from the list row.
+
+ANTI-PATTERN
+
+The user must navigate to a separate actions menu, a detail tab, or an edit screen to find the one action that the current state obviously requires.
+
+
+
+3C — Visual Hierarchy Must Reflect Business Importance
+
+What is shown first and given the most visual weight must reflect operational significance — not aesthetic preference.
+
+
+
+HIGH IMPORTANCE — Show First
+
+LOW IMPORTANCE — Show Later
+
+State, status, and exception flags
+
+Amount, risk level, due date
+
+Owner, responsible actor, next action
+
+Active blockers and warnings
+
+Decorative metrics and vanity KPIs
+
+Secondary metadata and reference IDs
+
+Ornamental summary counts
+
+Timestamps with no action implication
+
+
+
+3D — Exceptions Must Be Louder Than Routine
+
+Normal flows should feel smooth and calm. Failures, blockers, missing approvals, overdue items, and policy breaches must stand out immediately. A system that makes exceptions visually equal to routine states is not helping operations — it is actively harming them.
+
+
+
+⚠️
+
+An exception styled identically to a healthy record will be missed. Visual differentiation is not aesthetics — it is operational safety. Overdue, blocked, rejected, and flagged states must demand attention without the user having to search for them.
+
+
+
+3E — Avoid False Simplicity
+
+The aim is not to erase complexity. The aim is to translate it. Bad simplification hides dependencies, state changes, consequences, institutional roles, and irreversible steps. Good simplification makes complexity manageable by structuring it clearly.
+
+
+
+CORRECT PATTERN
+
+A complex multi-step approval process is surfaced as a clear workflow timeline: who has acted, who acts next, what is required to proceed. Each step is named with its actor and current state.
+
+ANTI-PATTERN
+
+A complex multi-step process is hidden behind a single status badge. The user cannot see where they are, what has happened, or what is still required.
+
+
+
+3F — Accessibility and Mobile Are Not Optional
+
+★
+
+NEW IN v1.1 — All workflow visibility rules apply equally to screen reader users and to mobile viewports. Workflow clarity must not degrade because of device or assistive technology. Accessibility is not a separate workstream — it is a requirement of every principle in this doctrine.
+
+
+
+All interactive elements must meet WCAG 2.1 AA contrast and focus requirements.
+
+Status changes must be communicated to assistive technologies via semantic markup — not only through colour.
+
+The five-question test (Principle 8) must be answerable on a mobile viewport without horizontal scrolling or mode switching.
+
+Action surfaces that are contextually surfaced on desktop must remain accessible on mobile — collapsed menus are acceptable; hidden workflows are not.
+
+
+
+4. Workflow Modelling — Required Before Every Feature Build
+
+
+
+
+Before any screen or feature goes to design or build, the responsible team must produce a workflow model. This is not optional and not a formality. It is the foundation of every design decision that follows. Any design review submitted without an underlying workflow model will be returned.
+
+
+
+Model Component
+
+What Must Be Defined
+
+Entity
+
+What is the thing being modelled? Name it precisely. (e.g. invoice, submission, session, requisition, enrolment)
+
+States
+
+What states can it be in? List them all. (e.g. draft, pending, approved, rejected, active, closed, overdue)
+
+Transitions
+
+How does it move between states? Name each transition. (e.g. publish, approve, reject, submit, pay, cancel, escalate)
+
+Actors
+
+Who can trigger each transition? Be specific about role. (e.g. admin, department head, finance officer, system)
+
+Preconditions
+
+What must be true before an action is allowed? (e.g. approval exists, deadline not passed, required fields complete)
+
+Outcomes
+
+What does the transition cause downstream? (e.g. notification sent, linked record created, child records updated, audit entry written)
+
+
+
+📌
+
+Only after this model is complete should UI layout be designed. The workflow model is the source of truth for what the interface must show. Layout decisions made before the model is complete will be reworked at cost.
+
+
+
+5. The Seven Anti-Patterns — These Are Banned
+
+
+
+
+The following patterns have appeared in our product work. They are formally prohibited. Design reviews will fail on any of these. Each represents a predictable failure mode that damages user trust, increases support overhead, or causes real operational harm.
+
+
+
+▲
+
+AMENDED IN v1.1 — The original 'AI-generated SaaS sameness' anti-pattern has been removed. The problem it described — interfaces optimised for appearance over operation — is already captured by 'Polished emptiness' and 'Generic dashboards.' The previous framing was political, not operational. The ban on appearance-first design stands; the attribution to AI tooling does not.
+
+
+
+Anti-Pattern
+
+Why It Is Banned
+
+Polished emptiness
+
+Looks modern, says little, guides nothing. Clean layout with hidden process is a failure, not a feature. Cosmetic quality is not a substitute for workflow clarity.
+
+Hidden workflow
+
+Critical business rules exist only in backend logic. The user discovers them through error messages. Rules must be surfaced before they become blocking failures.
+
+Status without consequence
+
+Badges exist but actions and available behaviour do not change based on them. Status must drive interface state — not just label it.
+
+Generic dashboards replacing operational screens
+
+Everything becomes KPI cards when what the user needs is traceability, control, and the ability to act. Summary replaces substance.
+
+Pretty forms with surprise validation
+
+The system waits until submit to reveal rules it could have explained during entry. Validation must be contextual, early, and in the user's language.
+
+Detached records
+
+Users cannot see where a record came from, what it is linked to, or what it affects. Every major record needs visible lineage and context.
+
+Role confusion
+
+The UI does not make it clear who acts next. Waiting states are unexplained. Users cannot distinguish 'waiting on me' from 'waiting on someone else'.
+
+
+
+6. Component Standards
+
+
+
+
+The following standards apply to specific UI components. They are binding on all new work and on any component undergoing significant revision.
+
+
+
+6A — Forms
+
+Explain what is being created at the top of the form — not just a field label. The user must know the downstream consequence of what they are filling in.
+
+Signal required versus optional fields clearly and consistently — not only at the point of error.
+
+Show downstream consequences before submission. Where an action is irreversible or triggers downstream changes, state this explicitly before the user commits.
+
+Validate at the point of input, in the user's language. Do not accumulate errors and reveal them all at submit.
+
+Adapt to role and context. The same form should not look identical to every actor — the information shown and the warnings surfaced should reflect the actor's role in the workflow.
+
+Where possible, preview what the system will produce before the user commits. Reduce the cost of an error before it is made.
+
+
+
+6B — Tables and Lists
+
+Every meaningful table must help users identify what needs attention, what is at risk, and what is blocked — without opening each row.
+
+Include status, due date, owner, exception count, and last-activity columns where operationally relevant. Do not reduce list views to names and dates only.
+
+Rows should lead naturally into detail views that preserve context. The user should not feel they have left the workflow when they open a record.
+
+Sorting and filtering must reflect operational priority. Default sort should surface what needs attention first — not creation date or alphabetical order.
+
+
+
+6C — Detail Pages
+
+Combine in a single view: primary record identity, current state, linked records, timeline or history, and allowed actions. Do not distribute these across tabs that require hunting.
+
+Include contextual notes, exceptions, and warnings prominently — not buried in secondary tabs that users rarely open.
+
+The record must feel like part of a living process, not an isolated document. Its position in a workflow should be legible at a glance.
+
+Lineage must be visible: what created this record, what it is connected to, and what it affects downstream.
+
+
+
+💡
+
+The standard for a detail page: a new user who has never seen this record before should be able to understand what it is, where it sits in the workflow, who acts next, and what actions are available — without reading a manual.
+
+
+
+7. Review Checklist — All Submissions Must Pass This
+
+
+
+
+Every design or engineering submission will be evaluated against this checklist. Any item marked weak results in the submission being returned. Self-assess before submitting. The completed checklist must be attached to the submission as a PDF or PR comment — it is not optional.
+
+
+
+Area
+
+Evaluation Standard — Pass or Return
+
+☐
+
+Workflow Clarity
+
+Does the UI reveal the workflow? Can a new user infer the process from the screen alone, without documentation or training?
+
+☐
+
+Rule Visibility
+
+Are business rules visible before error? Are state restrictions clear at the point of action — not only when the system rejects an input?
+
+☐
+
+Status Quality
+
+Are statuses semantically precise? Does every status value change at least one of: available actions, button state, colour, or warning text?
+
+☐
+
+Traceability
+
+Can users see linked records and lineage? Is cause-and-effect visible? Can they trace the record back to its origin and forward to its consequences?
+
+☐
+
+Responsibility
+
+Is the next actor clear? Are waiting states explained? Is 'waiting on me' visually distinct from 'waiting on someone else'?
+
+☐
+
+Learnability
+
+Is the UI self-teaching? Would a new hire be able to complete the primary workflow without asking a colleague?
+
+☐
+
+Operational Honesty
+
+Does the screen respect how the institution actually works, or is it flattening real process into generic UI tropes?
+
+☐
+
+Five-Question Test
+
+Does a documented walkthrough exist answering all five: What am I looking at? State? What matters? Next action? Consequence?
+
+☐
+
+Accessibility
+
+Do all interactive elements meet WCAG 2.1 AA? Are status changes communicated semantically, not only through colour?
+
+☐
+
+Mobile Scope
+
+Does the workflow remain fully operable on a mobile viewport? Does no critical action become hidden on small screens?
+
+
+
+8. Quick Reference — Patterns That Work
+
+
+
+
+The following patterns are correct implementations of this doctrine. They are reference examples, not requirements. Deviations are permitted with written justification filed at the time of design review. See also Appendix A for extended reference implementations.
+
+
+
+Approval Workflows
+
+When a record moves through an approval chain, every step of that chain must be visible at once. The user must see: who has already acted and when, who holds the current action, what their authority is, and whether a deadline is active. Action buttons must appear in the same view as the workflow status — not behind a separate screen.
+
+
+
+✓
+
+Display the approval chain as a visual timeline showing completed, active, and pending steps. Label each step with the actor, their role, the action taken, and the timestamp. Surface the action the current user can take directly below the timeline.
+
+
+
+Overdue and Exception States
+
+Any record that is overdue, blocked, or in breach of a business rule must be immediately distinguishable from healthy records. The exception must also explain itself: what is wrong, since when, and what action would resolve it.
+
+
+
+✓
+
+Use distinct colour treatment, a clear status label with days overdue, and inline actions that address the exception directly from the list row. Do not require the user to open the record to understand the nature or severity of the exception.
+
+
+
+Record Detail Pages
+
+A detail page must read as a complete picture of the record's place in the system: identity, current state, history of how it arrived at this state, linked records, and available actions. A user arriving for the first time should leave knowing exactly where things stand and what to do next.
+
+
+
+✓
+
+Lead with state and identity. Follow with key metrics relevant to this record's type. Show linked records with their own status. Display timeline below. Place allowed actions where the eye lands after reading the record.
+
+
+
+Financial and Transactional Screens
+
+Financial screens carry institutional weight. They must reflect the formality of what they represent: authorised amounts, audit trails, counterparty identity, terms, and payment conditions. A purchase order or invoice must feel like a financial document — not a SaaS data card.
+
+
+
+✓
+
+Show counterparty information, amounts with tax treatment, terms and notes, and the trail back to the originating requisition. Make print and PDF export immediately available. Show the full lifecycle: what created this document and what it has produced downstream.
+
+
+
+9. The Final Standard
+
+
+
+
+The product should feel:
+
+Intuitive without being shallow.
+
+Structured without being stiff.
+
+Clear without being simplistic.
+
+Procedural without being oppressive.
+
+Visual without becoming decorative nonsense.
+
+The user should feel oriented, informed, in control, warned when necessary, and guided through their work. The system should feel like it understands the institution it serves. That is the bar.
+
+
+
+This doctrine is effective immediately and applies to all new product work and any existing screen undergoing significant revision.
+
+
+
+Questions should be directed to the design lead or engineering lead for the relevant product area. This document is reviewed monthly through v1.3, then quarterly thereafter.
+
+
+
+10. Document Ownership & Version Control
+
+
+
+
+Document Title
+
+UI/UX Working Doctrine — Product Design & Engineering Standards
+
+Document Owner
+
+Tawanda Masaiti
+
+Contact
+
+tmasaiti@gmail.com  |  0772 209 275
+
+Issuing Authority
+
+Office of the CTO
+
+Version
+
+1.1 (Amended following independent review, April 2026)
+
+Original Issue
+
+March 2026
+
+Amendment Date
+
+April 2026
+
+Review Cycle
+
+Monthly: v1.0–v1.3. Quarterly: v1.4 onwards.
+
+Classification
+
+Confidential — Internal Use Only
+
+Distribution
+
+All design and engineering personnel. Mandatory reading for onboarding.
+
+
+
+11. Enforcement Protocol
+
+
+
+
+★
+
+NEW IN v1.1 — Mandatory amendment. The doctrine previously used mandatory language with no defined enforcement mechanism. This section adds the process, authority, artefact, and consequence structure required to make the doctrine operational rather than aspirational.
+
+
+
+A doctrine without enforcement is a memo. This section defines who enforces the standard, at what stage, through what artefact, and with what consequence. These are the teeth of the document.
+
+
+
+11A — Gatekeeper Authority
+
+Every design or engineering submission affecting a user-facing screen requires sign-off from both the Design Lead and the Engineering Lead for the relevant product area. Neither can approve unilaterally. Both must countersign the review checklist.
+
+
+
+The CTO holds override authority. An override requires a written justification filed in the project's decision log within 24 hours of the override decision. Override justifications are reviewed at the next monthly doctrine review.
+
+
+
+11B — Submission Process
+
+Step
+
+Actor
+
+Required Artefact
+
+SLA
+
+Submit
+
+Designer or Engineer
+
+Completed Section 7 checklist attached as PDF or PR comment. Five-question walkthrough documented per screen.
+
+At submission
+
+Initial Review
+
+Design Lead
+
+Checklist verified line by line. No partial passes. Pass or return decision recorded in writing.
+
+48 hours
+
+Technical Review
+
+Engineering Lead
+
+State machine compliance, status enum use, audit hook presence verified against Section 12.
+
+48 hours
+
+Sign-off
+
+Both Leads
+
+Joint approval. Both names on the record. Code may not be merged until this step is complete.
+
+24 hours post-review
+
+Override (if needed)
+
+CTO only
+
+Written justification filed in decision log. Reason, scope, and time limit of override must be stated explicitly.
+
+24 hours post-decision
+
+
+
+11C — Rejection and Return
+
+A rejected submission must receive a written return note specifying: the checklist item that failed, the nature of the failure, and what a passing revision would look like. Vague returns ('needs more work') are not acceptable. The reviewer is responsible for the quality of their feedback.
+
+
+
+The designer or engineer has the right to challenge a return by escalating to the CTO's office within 48 hours. The CTO's decision on any challenge is final for that version.
+
+
+
+11D — Non-Compliance Consequences
+
+Code that has not received dual sign-off will not be merged to any branch above feature scope.
+
+Design assets submitted to staging without a completed checklist will be pulled back immediately.
+
+Repeated non-compliance — defined as three or more unchecked submissions within a single sprint — triggers a formal review of the responsible engineer's or designer's onboarding status with respect to this doctrine.
+
+The enforcement log is reviewed monthly by the CTO's office. Patterns of non-compliance inform the quarterly update cycle.
+
+
+
+12. Engineering Requirements — Technical Integration
+
+
+
+
+★
+
+NEW IN v1.1 — Mandatory amendment. The original doctrine addressed UI/UX but said nothing about how front-end code must technically support its rules. Without engineering requirements, 'show business rules before error' becomes a design aspiration with no implementation path. This section closes that gap.
+
+
+
+Design and engineering are one pipeline. A workflow that a designer specifies correctly but an engineer cannot implement consistently is still a broken workflow. The following technical requirements are binding on all front-end and full-stack work.
+
+
+
+12A — State Machine Modelling
+
+Every entity with workflow states must be modelled as a finite state machine in code. Ad-hoc conditional logic scattered across components is not acceptable. The state machine must be the single source of truth for what transitions are possible and under what conditions.
+
+
+
+Use XState, a purpose-built FSM library, or an equivalent that produces an explicit state graph.
+
+The state machine must map directly to the workflow model produced in Section 4. Any divergence between the model and the implementation must be documented and reviewed.
+
+State machine definitions must be committed to the repository and reviewed as part of the standard PR process — not embedded invisibly in component logic.
+
+
+
+📌
+
+If you cannot draw the state machine as a diagram, you should not be writing the code that implements it. The diagram is the specification. The code is the implementation. Both must exist.
+
+
+
+12B — Business Rule Exposure
+
+Business rules that affect the UI — approvals required, thresholds, permission checks, deadline constraints — must be exposed to the front end in a structured, queryable form. They must not exist only as server-side validation that surfaces through error responses.
+
+
+
+Rules affecting workflow actions must be available via a /rules endpoint, a context object populated at load time, or an equivalent mechanism agreed with the tech lead.
+
+The front end must consume these rules to render pre-action warnings, disable actions before they are attempted, and explain constraints inline.
+
+Rules must not be duplicated between front-end and back-end logic. The back end is the source of truth; the front end reads and displays.
+
+
+
+12C — Status Enumerations
+
+Status values must not be free-form strings defined independently by different components or teams. They are a shared contract between the data layer, the back end, and the front end.
+
+
+
+All status values for a given entity type must be defined in a single shared enum or constant file.
+
+Component styling, available actions, and warning states must be derived from these enum values — never from raw string comparisons.
+
+Adding a new status value requires a pull request that touches: the enum definition, the component that renders it, the state machine that transitions to it, and the checklist entry that covers it.
+
+
+
+12D — Audit Logging from UI Actions
+
+Every action that changes the state of a record must produce an audit entry. The UI is responsible for passing context that the back end alone cannot infer.
+
+
+
+Audit entries must include: actor identity, timestamp, previous state, new state, action identifier, and source screen ID.
+
+Source screen ID must be a stable, human-readable identifier (not a URL) that can be used to trace a state change back to the screen from which it was triggered.
+
+Audit entries are the basis for the lineage and history displays required by Principle 5 and Section 6C. They must be structured accordingly from the moment of implementation — retrofitting audit data is expensive.
+
+
+
+12E — Review Gate for Engineering Compliance
+
+The Engineering Lead review step defined in Section 11B must verify the following before sign-off:
+
+
+
+State machine exists and is committed to the repository for every entity with workflow states in this submission.
+
+Business rules affecting this screen are exposed via the agreed mechanism — not inferred from error responses.
+
+All status values in this submission are sourced from the shared enum.
+
+Every state-changing action in this submission writes an audit entry with the required fields.
+
+Accessibility requirements in Section 3F have been met and verified.
+
+
+
+Appendix A — Approved Reference Implementations
+
+
+
+
+▲
+
+NEW IN v1.1 — These reference implementations were previously embedded in Section 8 as prescriptive patterns. Per independent review, they have been moved here and reclassified: these are examples, not requirements. Deviations are permitted where a written justification is filed at the time of design review.
+
+
+
+The patterns below represent known-good implementations of this doctrine. Study them to understand the standard. Do not copy them blindly — every implementation must be justified against its specific workflow.
+
+
+
+A1 — Approval Chain Display
+
+Show the full chain as a vertical or horizontal timeline: completed steps (actor, role, timestamp, outcome), current active step (actor, required action, deadline if applicable), and pending steps (actor, role, awaiting). Place the action the current user can take directly below the chain. Do not separate the status from the action into different views.
+
+
+
+A2 — Exception Highlighting in Lists
+
+Rows with overdue, blocked, or flagged status must use a distinct background or left-border colour treatment (not only a text label). The exception must be scannable at row level: status label, days outstanding or exception type, and the primary resolution action — all visible without opening the record.
+
+
+
+A3 — Record Detail Structure
+
+Lead with: entity name and type, current status with colour treatment, primary metric (amount, score, date). Follow with: key linked records with their own status visible. Then: allowed actions for the current actor. Then: activity timeline or history. Then: secondary metadata. This order reflects operational priority, not data schema order.
+
+
+
+A4 — Financial Document Layout
+
+Counterparty block (name, reference, contact). Document header (number, date, terms). Line items with amounts and tax treatment. Running total with tax summary. Lineage block (linked requisition, approvals received). Action bar (approve, reject, pay, export). The document must feel like a document — not a form.
+
+
+
+A5 — Inline Form with Consequence Preview
+
+Before the user submits, display a summary of what the system will do: records created, notifications sent, states changed in linked records, irreversible actions flagged. This preview must be generated dynamically from the current input — not static boilerplate text.
+
+
+
+Appendix B — Version Change Log
+
+
+
+
+This log records all substantive changes between versions. It is updated with every release and forms the basis for the monthly review cycle discussion.
+
+
+
+Section
+
+Change
+
+Rationale
+
+Priority
+
+New — §11
+
+Added Enforcement Protocol: gatekeeper roles, submission artefact, rejection process, override mechanism, consequences for non-compliance.
+
+Without enforcement the doctrine is aspirational. Language alone does not change behaviour.
+
+Mandatory
+
+New — §12
+
+Added Engineering Requirements: state machines, business rule exposure, status enumerations, audit logging, engineering review gate.
+
+Design-only doctrine fails at implementation. Engineers need binding technical standards, not only design principles.
+
+Mandatory
+
+§2 — All Principles
+
+Added measurable, binary criterion to each of the eight principles.
+
+Unmeasured standards are applied inconsistently. Criteria remove subjectivity from review.
+
+Mandatory
+
+§3A
+
+Revised from absolute ban on named patterns to conditional guidance with justification test per pattern.
+
+The ban was internally inconsistent with Section 8, which prescribed patterns of the same type. Conditional guidance is more defensible and more useful.
+
+High
+
+§3F — New
+
+Added accessibility and mobile scope requirements.
+
+Workflow visibility must not depend on viewport or assistive technology. Previously absent from the doctrine.
+
+High
+
+§5
+
+Removed 'AI-generated SaaS sameness' anti-pattern.
+
+Political framing, not operational. The underlying problem is already covered by 'Polished emptiness' and 'Generic dashboards.'
+
+Low
+
+§8 → App. A
+
+Moved Section 8 reference patterns to Appendix A and reclassified as examples, not requirements.
+
+Removes the internal contradiction between prescribed patterns in §8 and banned patterns in §3A.
+
+High
+
+§9 / Review
+
+Changed review cycle from quarterly to monthly for v1.0–v1.3.
+
+First-quarter enforcement will surface edge cases and contested applications. Monthly review allows rapid correction before bad precedents set.
+
+High
+
+§7 Checklist
+
+Added accessibility and mobile scope items to the review checklist.
+
+Consistent with §3F addition.
+
+High
+
+
+
+Prepared by Tawanda Masaiti  |  tmasaiti@gmail.com  |  0772 209 275
+
+© 2026 — Confidential & Proprietary. All rights reserved.

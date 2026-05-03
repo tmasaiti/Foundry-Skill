@@ -1,0 +1,3073 @@
+FOUNDRY IAM
+
+PLATFORM SPECIFICATION
+
+High-Fidelity Engineering & Product Spec v1.0
+
+
+
+
+Classification
+
+INTERNAL — CONFIDENTIAL
+
+Status
+
+APPROVED FOR DEVELOPMENT
+
+Version
+
+1.0.0 — MVP
+
+Target Launch
+
+End of Week (6-day build)
+
+Longevity Target
+
+6–12 months without forced upgrades
+
+Engine
+
+Keycloak 24 (Apache 2.0)
+
+
+
+This document is the single source of truth for the Foundry IAM SaaS platform. It covers product scope, system architecture, data model, API contract, infrastructure layout, developer setup, billing model, security posture, and a day-by-day build plan. Any engineer picking up this document should be able to set up, build, and ship without further verbal clarification.
+
+
+
+SECTION 1
+
+Product Definition & Scope
+
+
+
+
+1.1 What We Are Building
+
+Foundry IAM is a multi-tenant, developer-first Identity & Access Management platform. It is the Stripe for IAM: a hosted service that lets software teams integrate enterprise-grade authentication and authorisation into their products in under 30 minutes, without operating their own Keycloak cluster or writing a single line of auth plumbing.
+
+Developers sign up, create a Tenant, create an App, copy two environment variables, and have working OIDC login backed by a production-grade Keycloak realm. That is the product.
+
+1.2 What We Are NOT Building (MVP Exclusions)
+
+The following are explicitly deferred. They will not be built in MVP and their absence will not block a paying customer:
+
+SAML — OIDC only for MVP
+
+SCIM provisioning
+
+Custom federation / Bring Your Own IdP UI
+
+Custom login theme builder (single branded theme ships with the platform)
+
+Advanced RBAC UI beyond roles + groups
+
+Multi-region active-active Keycloak
+
+Analytics dashboards beyond MAU counters
+
+Audit log export / SIEM integrations
+
+Marketplace of social providers (Google/GitHub login supported via Keycloak config, not UI-driven)
+
+
+
+1.3 The Market Position
+
+Competitor
+
+Our Differentiator
+
+Auth0 / Okta
+
+Best-in-class DX but $8k–$25k/month at scale. Enterprise lock-in.
+
+AWS Cognito
+
+Cheap but brutal DX, rigid, deeply coupled to AWS.
+
+Clerk
+
+Great React DX, limited enterprise isolation, per-MAU pricing climbs fast.
+
+Self-hosted Keycloak
+
+Free engine, $0 licensing, but you own all ops, upgrades, clustering.
+
+Foundry IAM (us)
+
+DX-first. Open standards. No vendor lock-in. 85%+ margin. Affordable enterprise pricing.
+
+
+
+1.4 Core Invariants (Must Never Break)
+
+Engineering Law
+
+These invariants define the product contract. Violating them breaks customer integrations and requires a major version bump. They must be enforced via automated tests.
+
+
+
+Realm names are deterministic: tnt_<tenantId> for tenant realms, wsp_<workspaceId> for workspace realms
+
+Issuer URL is always: https://id.<domain>/realms/<realmName>
+
+Every realm ships with exactly: tenant_owner, tenant_admin, tenant_billing, tenant_viewer roles
+
+Every realm ships with exactly: owners, admins, billing groups
+
+GET /v1/workspaces/{id}/oidc is the single canonical source of OIDC endpoints
+
+Customers create Workspaces. They never create Realms directly. Realms are an implementation detail.
+
+Public apps always use PKCE. No exceptions.
+
+
+
+
+SECTION 2
+
+System Architecture
+
+
+
+
+2.1 Service Map
+
+The platform is composed of seven discrete services. Each has a single responsibility and communicates over defined interfaces. No service directly accesses another service's datastore.
+
+Service
+
+Role
+
+Port (local)
+
+Tech
+
+keycloak
+
+Identity engine — OIDC/OAuth2 server, realm management
+
+8080
+
+Keycloak 24 + PostgreSQL
+
+api
+
+Control plane — tenant/workspace/app provisioning, billing
+
+3000
+
+Node.js 20 + Express + Prisma
+
+frontend
+
+SaaS portal — tenant dashboard, app setup, docs links
+
+5173
+
+React 18 + Vite + TailwindCSS
+
+docs
+
+Developer documentation site
+
+4000
+
+Docusaurus 3 (static)
+
+postgres
+
+Persistent store — Keycloak DB + Control Plane DB (separate schemas)
+
+5432
+
+PostgreSQL 16
+
+redis
+
+Session cache + rate-limit counters + idempotency keys
+
+6379
+
+Redis 7 (Alpine)
+
+mailpit
+
+Local SMTP trap — catches all outbound email in dev
+
+8025 (UI) / 1025 (SMTP)
+
+Mailpit
+
+
+
+2.2 Request Flow — User Login
+
+Browser → Foundry Portal (frontend:5173)
+
+  └─ User clicks 'Sign In'
+
+     └─ Portal redirects to Keycloak realm login page
+
+        └─ Keycloak authenticates user (password / MFA)
+
+           └─ Keycloak issues JWT (access + refresh + id tokens)
+
+              └─ Browser redirected back to Portal with auth code
+
+                 └─ Portal exchanges code for tokens (PKCE flow)
+
+                    └─ Portal stores tokens in memory (never localStorage)
+
+                       └─ Portal calls API with Authorization: Bearer <access_token>
+
+                          └─ API validates token against Keycloak JWKS
+
+                             └─ API extracts tenant_id, workspace_id, roles from claims
+
+                                └─ API returns authorised response
+
+
+
+2.3 Request Flow — Tenant Provisioning
+
+Operator calls: POST /v1/tenants
+
+  └─ Control Plane API validates request + checks idempotency key
+
+     └─ API writes Tenant record to control_plane DB (Postgres)
+
+        └─ API calls Keycloak Admin REST API:
+
+           ├─ POST /admin/realms  (create realm tnt_<id>)
+
+           ├─ Apply realm template (password policy, session lifetimes, events)
+
+           ├─ Create realm roles: tenant_owner, tenant_admin, tenant_billing, tenant_viewer
+
+           ├─ Create groups: owners, admins, billing
+
+           ├─ Create portal-mgmt confidential client
+
+           └─ Create owner user + assign to owners group
+
+              └─ API writes Workspace record + realm metadata
+
+                 └─ API publishes TenantProvisioned event to Redis stream
+
+                    └─ API returns 201 with tenant + workspace + OIDC metadata
+
+
+
+2.4 Network Topology
+
+Public-facing
+
+frontend (Vite/React), docs (Docusaurus), API /v1/* endpoints, Keycloak /realms/* endpoints
+
+Private (internal only)
+
+Keycloak Admin Console, Keycloak Admin REST API, Redis, Postgres, Mailpit SMTP
+
+Ingress routing
+
+NGINX or Caddy reverse proxy in production. In dev: direct ports via Docker Compose.
+
+TLS
+
+All public endpoints TLS-terminated at proxy. Keycloak configured ssl_required: external.
+
+API → Keycloak
+
+Control plane API communicates with Keycloak Admin REST API using a dedicated service account (master realm, minimal permissions).
+
+
+
+
+SECTION 3
+
+Data Model
+
+
+
+
+3.1 Control Plane Database (PostgreSQL schema: control_plane)
+
+All tables below live in the control_plane schema. Keycloak uses its own separate schema (keycloak) on the same Postgres instance but is never accessed directly by the control plane API.
+
+Table: tenants
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+id
+
+VARCHAR(26)
+
+PK, NOT NULL
+
+ULID — prefix tnt_
+
+name
+
+VARCHAR(255)
+
+NOT NULL
+
+Display name
+
+slug
+
+VARCHAR(63)
+
+UNIQUE, NOT NULL
+
+URL-safe, immutable after creation
+
+owner_user_id
+
+VARCHAR(26)
+
+FK → admins.id
+
+First admin; set post-provisioning
+
+plan
+
+VARCHAR(32)
+
+NOT NULL, DEFAULT starter
+
+starter | growth | enterprise
+
+status
+
+VARCHAR(32)
+
+NOT NULL, DEFAULT pending
+
+pending | active | suspended | deleted
+
+region
+
+VARCHAR(32)
+
+NOT NULL
+
+e.g. eu-west-1 (for future multi-region)
+
+mfa_policy
+
+VARCHAR(32)
+
+NOT NULL, DEFAULT optional
+
+disabled | optional | required-admins | required-all
+
+stripe_customer_id
+
+VARCHAR(64)
+
+NULLABLE
+
+Set after billing setup
+
+stripe_subscription_id
+
+VARCHAR(64)
+
+NULLABLE
+
+Active subscription
+
+created_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+updated_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+deleted_at
+
+TIMESTAMPTZ
+
+NULLABLE
+
+Soft delete
+
+
+
+Table: workspaces
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+id
+
+VARCHAR(26)
+
+PK, NOT NULL
+
+ULID — prefix wsp_
+
+tenant_id
+
+VARCHAR(26)
+
+FK → tenants.id, NOT NULL
+
+
+
+name
+
+VARCHAR(255)
+
+NOT NULL
+
+
+
+mode
+
+VARCHAR(32)
+
+NOT NULL
+
+shared-realm | isolated-realm
+
+keycloak_realm
+
+VARCHAR(128)
+
+NOT NULL, UNIQUE
+
+Actual realm name: tnt_<id> or wsp_<id>
+
+keycloak_issuer
+
+TEXT
+
+NOT NULL
+
+Cached issuer URL for fast reads
+
+status
+
+VARCHAR(32)
+
+NOT NULL, DEFAULT provisioning
+
+provisioning | active | error | deleted
+
+is_default
+
+BOOLEAN
+
+NOT NULL, DEFAULT false
+
+One default workspace per tenant
+
+created_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+updated_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+Table: apps
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+id
+
+VARCHAR(26)
+
+PK, NOT NULL
+
+ULID — prefix app_
+
+workspace_id
+
+VARCHAR(26)
+
+FK → workspaces.id, NOT NULL
+
+
+
+name
+
+VARCHAR(255)
+
+NOT NULL
+
+
+
+type
+
+VARCHAR(32)
+
+NOT NULL
+
+public | confidential
+
+keycloak_client_id
+
+VARCHAR(128)
+
+NOT NULL, UNIQUE
+
+app_<id> in Keycloak
+
+redirect_uris
+
+TEXT[]
+
+NOT NULL
+
+
+
+post_logout_redirect_uris
+
+TEXT[]
+
+NOT NULL, DEFAULT '{}'
+
+
+
+web_origins
+
+TEXT[]
+
+NOT NULL, DEFAULT '{}'
+
+
+
+pkce
+
+VARCHAR(32)
+
+NOT NULL
+
+required | optional | disabled
+
+scopes
+
+TEXT[]
+
+NOT NULL
+
+openid, profile, email minimum
+
+access_token_seconds
+
+INTEGER
+
+NOT NULL, DEFAULT 900
+
+
+
+refresh_token_seconds
+
+INTEGER
+
+NOT NULL, DEFAULT 2592000
+
+
+
+created_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+updated_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+Table: admins
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+id
+
+VARCHAR(26)
+
+PK, NOT NULL
+
+ULID
+
+workspace_id
+
+VARCHAR(26)
+
+FK → workspaces.id, NOT NULL
+
+
+
+email
+
+VARCHAR(255)
+
+NOT NULL
+
+
+
+full_name
+
+VARCHAR(255)
+
+NOT NULL
+
+
+
+role
+
+VARCHAR(32)
+
+NOT NULL
+
+owner | admin | billing | viewer | support
+
+keycloak_user_id
+
+VARCHAR(64)
+
+NULLABLE
+
+Set after KC user creation
+
+status
+
+VARCHAR(32)
+
+NOT NULL, DEFAULT invited
+
+invited | active | disabled
+
+invite_token_hash
+
+VARCHAR(128)
+
+NULLABLE
+
+bcrypt hash, cleared on acceptance
+
+invite_expires_at
+
+TIMESTAMPTZ
+
+NULLABLE
+
+
+
+created_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+updated_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+Table: audit_logs
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+id
+
+BIGSERIAL
+
+PK
+
+
+
+tenant_id
+
+VARCHAR(26)
+
+NULLABLE, FK → tenants.id
+
+NULL for system events
+
+workspace_id
+
+VARCHAR(26)
+
+NULLABLE
+
+
+
+actor_id
+
+VARCHAR(64)
+
+NULLABLE
+
+Admin ID or 'system'
+
+actor_email
+
+VARCHAR(255)
+
+NULLABLE
+
+Denormalised for readability
+
+action
+
+VARCHAR(128)
+
+NOT NULL
+
+e.g. tenant.created, app.deleted
+
+resource_type
+
+VARCHAR(64)
+
+NOT NULL
+
+tenant | workspace | app | admin
+
+resource_id
+
+VARCHAR(26)
+
+NOT NULL
+
+
+
+meta
+
+JSONB
+
+NULLABLE
+
+Additional context
+
+ip_address
+
+VARCHAR(64)
+
+NULLABLE
+
+
+
+created_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+Table: idempotency_keys
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+key
+
+VARCHAR(256)
+
+PK
+
+Tenant-scoped: <tenant_id>:<user_key>
+
+response_status
+
+INTEGER
+
+NOT NULL
+
+HTTP status of stored response
+
+response_body
+
+JSONB
+
+NOT NULL
+
+Stored response
+
+created_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+expires_at
+
+TIMESTAMPTZ
+
+NOT NULL
+
+Created_at + 24h
+
+
+
+Table: usage_snapshots
+
+Column
+
+Type
+
+Constraints
+
+Notes
+
+id
+
+BIGSERIAL
+
+PK
+
+
+
+tenant_id
+
+VARCHAR(26)
+
+FK → tenants.id, NOT NULL
+
+
+
+period_start
+
+DATE
+
+NOT NULL
+
+
+
+period_end
+
+DATE
+
+NOT NULL
+
+
+
+mau
+
+INTEGER
+
+NOT NULL, DEFAULT 0
+
+
+
+logins
+
+INTEGER
+
+NOT NULL, DEFAULT 0
+
+
+
+token_refresh
+
+INTEGER
+
+NOT NULL, DEFAULT 0
+
+
+
+recorded_at
+
+TIMESTAMPTZ
+
+NOT NULL, DEFAULT NOW()
+
+
+
+3.2 Redis Key Conventions
+
+Key Pattern
+
+Purpose
+
+rate:<ip>:<endpoint>
+
+Rate limit counter. TTL: 60s. Value: integer count.
+
+idem:<tenantId>:<key>
+
+Idempotency lock during in-flight request. TTL: 30s.
+
+session:<sessionId>
+
+Portal session (JWT claims cache). TTL: 15min.
+
+prov:<workspaceId>
+
+Provisioning lock — prevents duplicate realm creation. TTL: 120s.
+
+usage:<tenantId>:<YYYY-MM>
+
+Incrementing MAU/login counters. Flushed to Postgres nightly. TTL: 40 days.
+
+
+
+
+SECTION 4
+
+Project Structure & Developer Setup
+
+
+
+
+4.1 Monorepo Folder Structure
+
+All services live in a single repository. Each service is a self-contained folder with its own Dockerfile, package.json (or equivalent), and README. The root contains only orchestration files.
+
+foundry-iam/
+
+├── docker-compose.yml          # Full dev environment (all services)
+
+├── docker-compose.prod.yml     # Production overrides
+
+├── .env.example                # All required environment variables
+
+├── .env                        # Local only — never commit
+
+├── Makefile                    # Dev shortcuts (make up, make seed, make logs)
+
+├── README.md                   # Getting started in < 5 minutes
+
+│
+
+├── keycloak/                   # Identity engine
+
+│   ├── Dockerfile              # Keycloak 24 with themes + providers
+
+│   ├── themes/                 # Custom Foundry login theme
+
+│   │   └── foundry/            # Freemarker templates
+
+│   ├── providers/              # Custom SPI JARs (if needed)
+
+│   ├── realm-template/         # Base realm export JSON (applied on provision)
+
+│   │   └── base-realm.json
+
+│   └── scripts/
+
+│       └── init-realm.sh       # Bootstrap script for first-run
+
+│
+
+├── api/                        # Control plane (Node.js)
+
+│   ├── Dockerfile
+
+│   ├── package.json
+
+│   ├── tsconfig.json
+
+│   ├── prisma/
+
+│   │   ├── schema.prisma       # All control_plane tables
+
+│   │   └── migrations/         # Versioned SQL migrations
+
+│   ├── src/
+
+│   │   ├── index.ts            # Express app entrypoint
+
+│   │   ├── config/             # Env validation (zod)
+
+│   │   ├── middleware/
+
+│   │   │   ├── auth.ts         # JWT verification middleware
+
+│   │   │   ├── rateLimiter.ts  # Redis-backed rate limiting
+
+│   │   │   ├── idempotency.ts  # Idempotency key middleware
+
+│   │   │   └── audit.ts        # Audit log middleware
+
+│   │   ├── routes/
+
+│   │   │   ├── tenants.ts
+
+│   │   │   ├── workspaces.ts
+
+│   │   │   ├── apps.ts
+
+│   │   │   ├── admins.ts
+
+│   │   │   ├── billing.ts
+
+│   │   │   ├── support.ts
+
+│   │   │   ├── webhooks.ts
+
+│   │   │   └── health.ts
+
+│   │   ├── services/
+
+│   │   │   ├── keycloak/
+
+│   │   │   │   ├── client.ts   # Keycloak Admin REST API wrapper
+
+│   │   │   │   ├── realm.ts    # Realm provisioning service
+
+│   │   │   │   └── template.ts # Realm template application
+
+│   │   │   ├── billing/
+
+│   │   │   │   └── stripe.ts
+
+│   │   │   ├── email/
+
+│   │   │   │   └── mailer.ts   # Nodemailer → SMTP (Mailpit in dev)
+
+│   │   │   └── usage/
+
+│   │   │       └── counter.ts  # Redis usage counters
+
+│   │   ├── db/
+
+│   │   │   └── client.ts       # Prisma client singleton
+
+│   │   └── lib/
+
+│   │       ├── ulid.ts         # ID generation
+
+│   │       ├── errors.ts       # Standard error types
+
+│   │       └── logger.ts       # Structured JSON logging
+
+│   └── tests/
+
+│       ├── unit/
+
+│       └── integration/
+
+│
+
+├── frontend/                   # SaaS Portal (React)
+
+│   ├── Dockerfile
+
+│   ├── package.json
+
+│   ├── vite.config.ts
+
+│   ├── tailwind.config.ts
+
+│   ├── index.html
+
+│   └── src/
+
+│       ├── main.tsx
+
+│       ├── App.tsx
+
+│       ├── auth/               # OIDC client (oidc-client-ts)
+
+│       │   ├── oidcConfig.ts
+
+│       │   └── AuthProvider.tsx
+
+│       ├── pages/
+
+│       │   ├── Login.tsx
+
+│       │   ├── Dashboard.tsx
+
+│       │   ├── Tenants.tsx
+
+│       │   ├── Workspaces.tsx
+
+│       │   ├── Apps.tsx
+
+│       │   ├── AppDetail.tsx   # Integration snippets page
+
+│       │   ├── Admins.tsx
+
+│       │   └── Billing.tsx
+
+│       ├── components/
+
+│       │   ├── ui/             # Shadcn/ui components
+
+│       │   ├── Layout.tsx
+
+│       │   ├── TenantSwitcher.tsx
+
+│       │   └── CodeSnippet.tsx # Syntax-highlighted copy/paste
+
+│       ├── api/
+
+│       │   └── client.ts       # Type-safe API client (generated from OpenAPI)
+
+│       └── hooks/
+
+│           ├── useTenant.ts
+
+│           └── useApps.ts
+
+│
+
+├── docs/                       # Developer documentation
+
+│   ├── Dockerfile
+
+│   ├── package.json
+
+│   ├── docusaurus.config.ts
+
+│   ├── sidebars.ts
+
+│   └── docs/
+
+│       ├── intro.md
+
+│       ├── quickstart/
+
+│       │   ├── nextjs.md
+
+│       │   ├── express.md
+
+│       │   └── fastapi.md
+
+│       ├── api-reference/      # Auto-generated from OpenAPI YAML
+
+│       ├── concepts/
+
+│       │   ├── tenants.md
+
+│       │   ├── workspaces.md
+
+│       │   └── apps.md
+
+│       └── sdk/
+
+│           └── javascript.md
+
+│
+
+├── postgres/                   # Database configuration
+
+│   ├── init/
+
+│   │   └── 00-schemas.sql      # Create schemas on first run
+
+│   └── README.md
+
+│
+
+├── redis/                      # Redis configuration
+
+│   └── redis.conf              # Persistence + maxmemory policy
+
+│
+
+└── mailpit/                    # Email dev tooling
+
+    └── README.md               # How to use Mailpit in dev
+
+
+
+4.2 Docker Compose — Full Dev Environment
+
+The complete docker-compose.yml below brings up all seven services with a single command: docker compose up. No pre-configuration required beyond copying .env.example to .env.
+
+# docker-compose.yml
+
+# Usage: docker compose up --build
+
+
+
+version: '3.9'
+
+
+
+networks:
+
+  foundry:
+
+    driver: bridge
+
+
+
+volumes:
+
+  postgres_data:
+
+  redis_data:
+
+  keycloak_data:
+
+
+
+services:
+
+
+
+  # ─── POSTGRES ──────────────────────────────────────────────────
+
+  postgres:
+
+    image: postgres:16-alpine
+
+    container_name: foundry_postgres
+
+    restart: unless-stopped
+
+    environment:
+
+      POSTGRES_USER: ${POSTGRES_USER:-foundry}
+
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-foundry_secret}
+
+      POSTGRES_DB: ${POSTGRES_DB:-foundry}
+
+    volumes:
+
+      - postgres_data:/var/lib/postgresql/data
+
+      - ./postgres/init:/docker-entrypoint-initdb.d
+
+    ports:
+
+      - '5432:5432'
+
+    networks: [foundry]
+
+    healthcheck:
+
+      test: ['CMD-SHELL', 'pg_isready -U foundry']
+
+      interval: 10s
+
+      timeout: 5s
+
+      retries: 5
+
+
+
+  # ─── REDIS ─────────────────────────────────────────────────────
+
+  redis:
+
+    image: redis:7-alpine
+
+    container_name: foundry_redis
+
+    restart: unless-stopped
+
+    command: redis-server /usr/local/etc/redis/redis.conf
+
+    volumes:
+
+      - redis_data:/data
+
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+
+    ports:
+
+      - '6379:6379'
+
+    networks: [foundry]
+
+    healthcheck:
+
+      test: ['CMD', 'redis-cli', 'ping']
+
+      interval: 10s
+
+      timeout: 5s
+
+      retries: 3
+
+
+
+  # ─── MAILPIT ───────────────────────────────────────────────────
+
+  mailpit:
+
+    image: axllent/mailpit:latest
+
+    container_name: foundry_mailpit
+
+    restart: unless-stopped
+
+    ports:
+
+      - '1025:1025'  # SMTP
+
+      - '8025:8025'  # Web UI
+
+    networks: [foundry]
+
+
+
+  # ─── KEYCLOAK ──────────────────────────────────────────────────
+
+  keycloak:
+
+    build:
+
+      context: ./keycloak
+
+      dockerfile: Dockerfile
+
+    container_name: foundry_keycloak
+
+    restart: unless-stopped
+
+    depends_on:
+
+      postgres:
+
+        condition: service_healthy
+
+    environment:
+
+      KC_DB: postgres
+
+      KC_DB_URL: jdbc:postgresql://postgres:5432/foundry?currentSchema=keycloak
+
+      KC_DB_USERNAME: ${POSTGRES_USER:-foundry}
+
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-foundry_secret}
+
+      KC_HOSTNAME: ${KC_HOSTNAME:-localhost}
+
+      KC_HOSTNAME_PORT: '8080'
+
+      KC_HOSTNAME_STRICT: 'false'
+
+      KC_HTTP_ENABLED: 'true'
+
+      KEYCLOAK_ADMIN: ${KC_ADMIN:-admin}
+
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin_secret}
+
+      KC_LOG_LEVEL: ${KC_LOG_LEVEL:-INFO}
+
+    ports:
+
+      - '8080:8080'
+
+    networks: [foundry]
+
+    healthcheck:
+
+      test: ['CMD-SHELL', 'curl -sf http://localhost:8080/health/ready || exit 1']
+
+      interval: 15s
+
+      timeout: 10s
+
+      retries: 10
+
+      start_period: 60s
+
+
+
+  # ─── API (Control Plane) ───────────────────────────────────────
+
+  api:
+
+    build:
+
+      context: ./api
+
+      dockerfile: Dockerfile
+
+      target: development
+
+    container_name: foundry_api
+
+    restart: unless-stopped
+
+    depends_on:
+
+      postgres:
+
+        condition: service_healthy
+
+      redis:
+
+        condition: service_healthy
+
+      keycloak:
+
+        condition: service_healthy
+
+    environment:
+
+      NODE_ENV: development
+
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/foundry?schema=control_plane
+
+      REDIS_URL: redis://redis:6379
+
+      KC_BASE_URL: http://keycloak:8080
+
+      KC_ADMIN_USER: ${KC_ADMIN:-admin}
+
+      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin_secret}
+
+      KC_PUBLIC_BASE_URL: ${KC_PUBLIC_BASE_URL:-http://localhost:8080}
+
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+
+      SMTP_HOST: mailpit
+
+      SMTP_PORT: '1025'
+
+      SMTP_FROM: noreply@foundry-iam.local
+
+      JWT_JWKS_URI: http://keycloak:8080/realms/foundry-saas/protocol/openid-connect/certs
+
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
+
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+
+    volumes:
+
+      - ./api/src:/app/src  # Hot reload in dev
+
+    ports:
+
+      - '3000:3000'
+
+    networks: [foundry]
+
+
+
+  # ─── FRONTEND (SaaS Portal) ────────────────────────────────────
+
+  frontend:
+
+    build:
+
+      context: ./frontend
+
+      dockerfile: Dockerfile
+
+      target: development
+
+    container_name: foundry_frontend
+
+    restart: unless-stopped
+
+    depends_on: [api, keycloak]
+
+    environment:
+
+      VITE_API_URL: http://localhost:3000
+
+      VITE_KC_URL: http://localhost:8080
+
+      VITE_KC_REALM: foundry-saas
+
+      VITE_KC_CLIENT_ID: portal-spa
+
+    volumes:
+
+      - ./frontend/src:/app/src  # Hot reload
+
+    ports:
+
+      - '5173:5173'
+
+    networks: [foundry]
+
+
+
+  # ─── DOCS (Developer Documentation) ───────────────────────────
+
+  docs:
+
+    build:
+
+      context: ./docs
+
+      dockerfile: Dockerfile
+
+      target: development
+
+    container_name: foundry_docs
+
+    restart: unless-stopped
+
+    volumes:
+
+      - ./docs/docs:/app/docs  # Hot reload
+
+    ports:
+
+      - '4000:3000'
+
+    networks: [foundry]
+
+
+
+4.3 Environment Variables (.env.example)
+
+# ─── POSTGRES ─────────────────────────────────────────────────────────
+
+POSTGRES_USER=foundry
+
+POSTGRES_PASSWORD=change_me_in_production
+
+POSTGRES_DB=foundry
+
+
+
+# ─── KEYCLOAK ──────────────────────────────────────────────────────────
+
+KC_ADMIN=admin
+
+KC_ADMIN_PASSWORD=change_me_in_production
+
+KC_HOSTNAME=localhost
+
+KC_PUBLIC_BASE_URL=http://localhost:8080
+
+KC_LOG_LEVEL=INFO
+
+
+
+# ─── API ───────────────────────────────────────────────────────────────
+
+API_BASE_URL=http://localhost:3000
+
+LOG_LEVEL=debug
+
+
+
+# ─── STRIPE ────────────────────────────────────────────────────────────
+
+STRIPE_SECRET_KEY=sk_test_...
+
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+STRIPE_PRICE_STARTER=price_...
+
+STRIPE_PRICE_GROWTH=price_...
+
+STRIPE_PRICE_ENTERPRISE=price_...
+
+
+
+# ─── FRONTEND ──────────────────────────────────────────────────────────
+
+VITE_API_URL=http://localhost:3000
+
+VITE_KC_URL=http://localhost:8080
+
+VITE_KC_REALM=foundry-saas
+
+VITE_KC_CLIENT_ID=portal-spa
+
+
+
+4.4 Makefile Shortcuts
+
+# Makefile
+
+
+
+up:          ## Start all services
+
+        docker compose up --build -d
+
+
+
+down:        ## Stop all services
+
+        docker compose down
+
+
+
+logs:        ## Tail all logs
+
+        docker compose logs -f
+
+
+
+logs-api:    ## Tail API logs
+
+        docker compose logs -f api
+
+
+
+migrate:     ## Run Prisma migrations
+
+        docker compose exec api npx prisma migrate dev
+
+
+
+seed:        ## Seed dev data (1 tenant, 1 app)
+
+        docker compose exec api npm run seed
+
+
+
+test:        ## Run all tests
+
+        docker compose exec api npm test
+
+
+
+kc-admin:    ## Open Keycloak Admin Console
+
+        open http://localhost:8080/admin
+
+
+
+mail:        ## Open Mailpit email UI
+
+        open http://localhost:8025
+
+
+
+studio:      ## Open Prisma Studio (DB GUI)
+
+        docker compose exec api npx prisma studio
+
+
+
+reset:       ## Destroy volumes and start fresh
+
+        docker compose down -v && make up
+
+
+
+
+SECTION 5
+
+Keycloak Realm Template
+
+
+
+
+5.1 Realm Bootstrap Sequence
+
+When the control plane provisions a new tenant, the following sequence runs against the Keycloak Admin REST API. This is idempotent — running it twice produces the same result.
+
+Step
+
+API Call
+
+Notes
+
+1
+
+POST /admin/realms
+
+Create realm with all defaults applied
+
+2
+
+PUT /admin/realms/{realm}/ui-ext
+
+Apply branding (logo URL, primary colour)
+
+3
+
+POST /admin/realms/{realm}/roles (×4)
+
+tenant_owner, tenant_admin, tenant_billing, tenant_viewer
+
+4
+
+POST /admin/realms/{realm}/groups (×3)
+
+owners, admins, billing
+
+5
+
+Assign roles to groups (×3)
+
+owners→tenant_owner, admins→tenant_admin, billing→tenant_billing
+
+6
+
+POST /admin/realms/{realm}/clients
+
+Create portal-mgmt (confidential, service account only)
+
+7
+
+POST /admin/realms/{realm}/users
+
+Create owner user with temporary password
+
+8
+
+POST /admin/realms/{realm}/users/{id}/groups
+
+Assign owner user to owners group
+
+9
+
+PUT /admin/realms/{realm}/users/{id}/execute-actions-email
+
+Trigger verify + set password email
+
+
+
+5.2 Realm Defaults
+
+Setting
+
+Value
+
+registrationAllowed
+
+false — control plane manages user creation
+
+loginWithEmailAllowed
+
+true
+
+duplicateEmailsAllowed
+
+false
+
+verifyEmail
+
+true
+
+resetPasswordAllowed
+
+true
+
+sslRequired
+
+external
+
+bruteForceProtected
+
+true
+
+failureFactor
+
+5 attempts before lockout
+
+waitIncrementSeconds
+
+60
+
+maxFailureWaitSeconds
+
+900 (15 min lockout)
+
+accessTokenLifespan
+
+900 (15 minutes)
+
+ssoSessionIdleTimeout
+
+28800 (8 hours)
+
+ssoSessionMaxLifespan
+
+86400 (24 hours)
+
+offlineSessionIdleTimeout
+
+2592000 (30 days)
+
+actionTokenGeneratedByUserLifespan
+
+300 (5 min)
+
+internationalEnabled
+
+true
+
+defaultLocale
+
+en
+
+eventsEnabled
+
+true
+
+adminEventsEnabled
+
+true
+
+eventsExpiration
+
+604800 (7 days in Keycloak; ship to log pipeline beyond)
+
+
+
+5.3 Password Policy String
+
+length(10) and digit(1) and lowerCase(1) and upperCase(1) and specialChars(1) and passwordHistory(5)
+
+
+
+5.4 Built-in Clients
+
+Client
+
+Purpose
+
+portal-mgmt
+
+Confidential. Service accounts enabled. Used by control plane API to administer the realm. Granted minimal permissions: manage-users, view-clients. Standard flow disabled.
+
+account-console
+
+Keycloak built-in. Enabled for future self-service user profile management. Not linked from portal in MVP.
+
+portal-spa (SaaS admin realm only)
+
+Public OIDC client. Used by the Foundry IAM portal itself to authenticate our operators. Lives in the foundry-saas master realm, not in tenant realms.
+
+
+
+5.5 Custom Token Claims
+
+A custom protocol mapper is applied to every realm so that JWTs include platform-level context. This allows customer APIs to authorise based on claims without extra API calls.
+
+// Claims added to every Access Token
+
+{
+
+  "tenant_id": "tnt_2f8a1d",
+
+  "workspace_id": "wsp_c91b12",
+
+  "realm_roles": ["tenant_admin", "app_user"],
+
+  "iat": 1709120000,
+
+  "exp": 1709120900,
+
+  "iss": "https://id.foundry-iam.com/realms/tnt_2f8a1d",
+
+  "sub": "<keycloak_user_uuid>"
+
+}
+
+
+
+
+SECTION 6
+
+API Contract — Control Plane
+
+
+
+
+6.1 Global Conventions
+
+Convention
+
+Value
+
+Base URL
+
+https://api.foundry-iam.com
+
+Version prefix
+
+/v1
+
+Content-Type
+
+application/json
+
+Authentication
+
+Authorization: Bearer <portal_jwt> or Authorization: ApiKey <key>
+
+Idempotency
+
+Idempotency-Key header on all mutating requests
+
+IDs
+
+ULID prefixed: tnt_, wsp_, app_, inv_
+
+Timestamps
+
+ISO 8601 with timezone (TIMESTAMPTZ)
+
+Pagination
+
+cursor-based: ?cursor=<id>&limit=<n> (all list endpoints)
+
+Errors
+
+{ "error": { "code": "", "message": "", "details": {}, "request_id": "" } }
+
+Rate limiting
+
+200 req/min per IP (Redis). 429 returns Retry-After header.
+
+
+
+6.2 MVP Endpoints (Ship These First)
+
+Method
+
+Path
+
+Description
+
+Auth Required
+
+POST
+
+/v1/tenants
+
+Create tenant + realm + default workspace
+
+Portal JWT
+
+GET
+
+/v1/tenants/:id
+
+Get tenant
+
+Portal JWT
+
+PATCH
+
+/v1/tenants/:id
+
+Update plan / status
+
+Portal JWT (owner)
+
+GET
+
+/v1/tenants/:id/usage
+
+MAU + login counts for billing period
+
+Portal JWT
+
+POST
+
+/v1/tenants/:id/workspaces
+
+Create additional workspace (enterprise plan)
+
+Portal JWT (owner)
+
+GET
+
+/v1/tenants/:id/workspaces
+
+List workspaces
+
+Portal JWT
+
+GET
+
+/v1/workspaces/:id/oidc
+
+OIDC discovery metadata — canonical endpoint
+
+None (public)
+
+POST
+
+/v1/workspaces/:id/apps
+
+Create OIDC client in workspace realm
+
+Portal JWT (admin)
+
+GET
+
+/v1/workspaces/:id/apps
+
+List apps
+
+Portal JWT
+
+POST
+
+/v1/workspaces/:id/apps/:appId/client-secret/rotate
+
+Rotate client secret
+
+Portal JWT (admin)
+
+GET
+
+/v1/workspaces/:id/integration-snippets
+
+Copy-paste code for Node/Python/Go
+
+Portal JWT
+
+POST
+
+/v1/workspaces/:id/admins/invite
+
+Invite admin user
+
+Portal JWT (admin)
+
+GET
+
+/v1/workspaces/:id/admins
+
+List admins
+
+Portal JWT
+
+POST
+
+/v1/tenants/:id/billing/checkout
+
+Create Stripe Checkout session
+
+Portal JWT (owner/billing)
+
+POST
+
+/v1/webhooks/stripe
+
+Stripe webhook receiver (signature verified)
+
+None (Stripe sig)
+
+POST
+
+/v1/workspaces/:id/support/access
+
+Enable/disable time-boxed ops access
+
+Portal JWT (owner)
+
+GET
+
+/v1/meta/realm-template
+
+Returns current realm template contract
+
+None (public)
+
+GET
+
+/v1/health
+
+Health check
+
+None
+
+
+
+6.3 Key Request/Response Shapes
+
+POST /v1/tenants
+
+// Request
+
+{
+
+  "name": "Acme Inc",
+
+  "slug": "acme",
+
+  "owner": { "email": "dev@acme.com", "full_name": "Jane Dev" },
+
+  "mode": "shared-realm",
+
+  "region": "eu-west-1",
+
+  "plan": "starter",
+
+  "mfa_policy": "optional"
+
+}
+
+
+
+// Response 201
+
+{
+
+  "tenant": {
+
+    "id": "tnt_2f8a1d",
+
+    "name": "Acme Inc",
+
+    "slug": "acme",
+
+    "status": "active",
+
+    "plan": "starter",
+
+    "region": "eu-west-1",
+
+    "created_at": "2026-02-28T12:00:00Z"
+
+  },
+
+  "workspace": {
+
+    "id": "wsp_c91b12",
+
+    "name": "Default",
+
+    "mode": "shared-realm",
+
+    "keycloak": {
+
+      "realm": "tnt_2f8a1d",
+
+      "issuer": "https://id.foundry-iam.com/realms/tnt_2f8a1d",
+
+      "jwks_uri": "https://id.foundry-iam.com/realms/tnt_2f8a1d/protocol/openid-connect/certs",
+
+      "well_known": "https://id.foundry-iam.com/realms/tnt_2f8a1d/.well-known/openid-configuration"
+
+    }
+
+  }
+
+}
+
+
+
+POST /v1/workspaces/:id/apps
+
+// Request
+
+{
+
+  "name": "Acme Web App",
+
+  "type": "public",
+
+  "redirect_uris": ["https://app.acme.com/auth/callback"],
+
+  "post_logout_redirect_uris": ["https://app.acme.com/"],
+
+  "web_origins": ["https://app.acme.com"],
+
+  "pkce": "required",
+
+  "scopes": ["openid", "profile", "email"],
+
+  "token_lifetimes": { "access_token_seconds": 900, "refresh_token_seconds": 2592000 }
+
+}
+
+
+
+// Response 201
+
+{
+
+  "app": {
+
+    "id": "app_7a1f22",
+
+    "workspace_id": "wsp_c91b12",
+
+    "name": "Acme Web App",
+
+    "type": "public",
+
+    "oidc": {
+
+      "client_id": "app_7a1f22",
+
+      "issuer": "https://id.foundry-iam.com/realms/tnt_2f8a1d",
+
+      "authorization_endpoint": "https://id.foundry-iam.com/realms/tnt_2f8a1d/protocol/openid-connect/auth",
+
+      "token_endpoint": "https://id.foundry-iam.com/realms/tnt_2f8a1d/protocol/openid-connect/token",
+
+      "jwks_uri": "https://id.foundry-iam.com/realms/tnt_2f8a1d/protocol/openid-connect/certs"
+
+    }
+
+  }
+
+}
+
+
+
+
+SECTION 7
+
+Frontend — SaaS Portal
+
+
+
+
+7.1 Technology Stack
+
+Concern
+
+Technology
+
+Framework
+
+React 18 + TypeScript
+
+Build tool
+
+Vite 5
+
+Styling
+
+TailwindCSS 3 + shadcn/ui components
+
+OIDC client
+
+oidc-client-ts (standards-compliant, framework-agnostic)
+
+State
+
+React Context + TanStack Query (no Redux)
+
+API client
+
+Auto-generated from OpenAPI spec using openapi-typescript-codegen
+
+Code highlighting
+
+Shiki (for integration snippet display)
+
+Routing
+
+React Router 6
+
+Forms
+
+React Hook Form + Zod validation
+
+
+
+7.2 Page Structure
+
+Route
+
+Page
+
+Purpose
+
+/login
+
+Login.tsx
+
+Redirects to Keycloak for OIDC authentication
+
+/auth/callback
+
+Callback.tsx
+
+Handles OIDC redirect + stores tokens in memory
+
+/
+
+Dashboard.tsx
+
+Tenant overview: status, plan, MAU counter
+
+/apps
+
+Apps.tsx
+
+List all apps for current workspace
+
+/apps/new
+
+NewApp.tsx
+
+Create new OIDC client (public or confidential)
+
+/apps/:id
+
+AppDetail.tsx
+
+App config + copy-paste integration snippets
+
+/workspaces
+
+Workspaces.tsx
+
+List and manage workspaces (enterprise only)
+
+/admins
+
+Admins.tsx
+
+Invite and manage admins
+
+/billing
+
+Billing.tsx
+
+Current plan, Stripe checkout, usage summary
+
+/settings
+
+Settings.tsx
+
+Tenant settings: name, MFA policy
+
+
+
+7.3 Critical UX Rules
+
+Engineering Requirement
+
+These UX rules are non-negotiable for the portal to function correctly as an IAM product.
+
+
+
+Tokens must NEVER be stored in localStorage or sessionStorage. Store in memory only (React state + oidc-client-ts internal store).
+
+The portal authenticates via the foundry-saas Keycloak realm, NOT the tenant realm. Tenant realms are for customer apps.
+
+Every page must handle token expiry gracefully — silent renew via refresh token before expiry, redirect to login on failure.
+
+The App Detail page is the conversion page. It must show working integration snippets for Node.js, Python, and Go immediately after app creation.
+
+Copy-to-clipboard on all client_id, issuer URL, and jwks_uri values. No manual selection required.
+
+All destructive actions (delete app, revoke invite) require a confirmation modal with typed confirmation string.
+
+
+
+7.4 Integration Snippet Template (App Detail Page)
+
+When a developer creates an app, the portal generates ready-to-use code snippets. This is what closes deals. The snippet must be copy-paste runnable — no placeholders left for the developer to figure out.
+
+// Node.js / Express example (auto-populated with real values)
+
+import { expressjwt as jwt } from 'express-jwt'
+
+import jwksRsa from 'jwks-rsa'
+
+
+
+export const authMiddleware = jwt({
+
+  secret: jwksRsa.expressJwtSecret({
+
+    jwksUri: 'https://id.foundry-iam.com/realms/tnt_2f8a1d/protocol/openid-connect/certs',
+
+    cache: true,
+
+    rateLimit: true,
+
+  }),
+
+  audience: 'app_7a1f22',
+
+  issuer: 'https://id.foundry-iam.com/realms/tnt_2f8a1d',
+
+  algorithms: ['RS256'],
+
+})
+
+
+
+// Access claims in your handler:
+
+// req.auth.sub         → user ID
+
+// req.auth.tenant_id   → 'tnt_2f8a1d'
+
+// req.auth.realm_roles → ['app_user']
+
+
+
+
+SECTION 8
+
+Billing Model
+
+
+
+
+8.1 Pricing Tiers
+
+Plan
+
+Monthly Fee
+
+MAU Included
+
+Overage Rate
+
+Workspaces
+
+SLA
+
+Starter
+
+$99/month
+
+10,000 MAU
+
+$0.012 per extra MAU
+
+1 (default only)
+
+99.5% uptime
+
+Growth
+
+$399/month
+
+50,000 MAU
+
+$0.010 per extra MAU
+
+3 workspaces
+
+99.9% uptime
+
+Enterprise
+
+$999+/month
+
+Custom
+
+Negotiated
+
+Unlimited
+
+99.95% + SLA
+
+
+
+8.2 Economics (500k MAU Reference)
+
+Metric
+
+Value
+
+Infrastructure cost
+
+$1,200 – $2,000/month
+
+Cost per MAU
+
+$0.003
+
+Revenue at $0.01/MAU (500k)
+
+$5,000/month
+
+Gross margin
+
+~70–75% before engineering costs
+
+Revenue target ($2M/year)
+
+~415 Growth tenants OR ~50 Enterprise accounts OR 11M MAU
+
+
+
+8.3 Stripe Integration
+
+Concern
+
+Implementation
+
+Checkout flow
+
+POST /v1/tenants/:id/billing/checkout returns a Stripe Checkout URL. No card data touches our servers.
+
+Webhooks
+
+POST /v1/webhooks/stripe handles: customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed
+
+Plan enforcement
+
+On subscription update, control plane updates tenant.plan. API enforces plan limits (workspace count, MAU quota warnings).
+
+Overage billing
+
+Monthly cron reads usage_snapshots, computes overages, creates Stripe usage records for metered billing items.
+
+Trial
+
+14-day free trial on Starter plan. Card required upfront (Stripe Setup Intent). Charged on day 15.
+
+
+
+
+SECTION 9
+
+Security Posture
+
+
+
+
+9.1 Authentication & Authorisation
+
+Concern
+
+Implementation
+
+Control plane API auth
+
+All endpoints require valid JWT issued by the foundry-saas Keycloak realm. Validated via JWKS (RS256). Token lifetime: 15 minutes.
+
+API key auth
+
+SHA-256 hashed at rest. Scoped to a single tenant. Rate-limited. Displayed to user exactly once on creation.
+
+Keycloak Admin API access
+
+Control plane uses a dedicated service account (master realm) with minimal permissions. Credentials never exposed outside the API container.
+
+Tenant isolation
+
+Realm-level isolation: a compromised token from Tenant A is cryptographically invalid in Tenant B. No cross-realm validation.
+
+Portal JWT storage
+
+Tokens stored in memory only (oidc-client-ts). Never in localStorage, sessionStorage, or cookies.
+
+
+
+9.2 Infrastructure Security
+
+Keycloak Admin Console is NOT exposed on a public port. Admin API accessible only within Docker network (api → keycloak on internal DNS).
+
+PostgreSQL is NOT exposed on a public port in production. Accessible only within Docker network.
+
+Redis is NOT exposed on a public port in production. AUTH password enforced.
+
+All public endpoints sit behind NGINX/Caddy with TLS termination and security headers (HSTS, CSP, X-Frame-Options).
+
+Rate limiting on all endpoints: 200 req/min per IP, 10 req/min for /v1/tenants POST.
+
+Stripe webhook signature verification: raw body + STRIPE_WEBHOOK_SECRET. Reject any request without valid signature.
+
+Secrets in environment variables only. No secrets in Docker images, Git, or logs.
+
+
+
+9.3 Operational Security
+
+Support access is time-boxed (max 1440 minutes) and audit-logged with reason. Tenant must explicitly enable.
+
+All control plane mutations written to audit_logs table with actor, IP, timestamp, and payload hash.
+
+Invite tokens are bcrypt-hashed at rest. Expire in 7 days. Single-use.
+
+Brute force protection enabled on all Keycloak realms (5 failures → 15-minute lockout).
+
+Event retention: Keycloak events kept 7 days in-database. Ship to log pipeline (Loki/Datadog) for long-term retention.
+
+
+
+
+SECTION 10
+
+6-Day Build Plan
+
+
+
+
+This is a realistic plan for a senior engineer or a two-person team. Priority is ruthlessly sequential: nothing from Day N+1 blocks shipping Day N. At end of Day 6, the platform can accept a paying customer.
+
+Day 1: Foundation
+
+Goal
+
+All seven services start with docker compose up. Keycloak is reachable. API health check returns 200. Dev can send email.
+
+
+
+Set up monorepo: all folders, Makefile, .env.example, .gitignore
+
+Write docker-compose.yml with all services (postgres, redis, mailpit, keycloak, api, frontend, docs)
+
+Write Keycloak Dockerfile (24-alpine base, copy theme)
+
+Write API Dockerfile (Node.js 20-alpine, dev target with hot reload)
+
+Write Frontend Dockerfile (Vite dev server)
+
+Write Docs Dockerfile (Docusaurus dev server)
+
+Verify: make up brings all services healthy
+
+Verify: GET http://localhost:8080/health/ready returns OK
+
+Verify: GET http://localhost:3000/v1/health returns { status: 'ok' }
+
+Verify: http://localhost:8025 shows Mailpit UI
+
+
+
+Day 2: Control Plane Core
+
+Goal
+
+POST /v1/tenants successfully creates a Keycloak realm and returns OIDC discovery metadata.
+
+
+
+Initialise Prisma schema with all tables. Run first migration.
+
+Implement Keycloak Admin API client (typed wrapper around Keycloak REST API)
+
+Implement realm provisioning service (all 9 steps from Section 5.1)
+
+Implement POST /v1/tenants endpoint with idempotency middleware
+
+Implement GET /v1/tenants/:id
+
+Implement GET /v1/workspaces/:id/oidc
+
+Implement audit log middleware
+
+Verify: POST /v1/tenants creates realm visible in Keycloak Admin Console
+
+Verify: GET /v1/workspaces/:id/oidc returns valid OIDC metadata
+
+
+
+Day 3: Apps + Admins + Email
+
+Goal
+
+A developer can create an App, get a client_id, and invite a colleague. Invite email lands in Mailpit.
+
+
+
+Implement POST /v1/workspaces/:id/apps (public and confidential templates)
+
+Implement GET /v1/workspaces/:id/apps
+
+Implement POST .../client-secret/rotate
+
+Implement POST /v1/workspaces/:id/admins/invite (create user in KC + send invite email via Mailpit)
+
+Implement GET /v1/workspaces/:id/admins
+
+Implement GET /v1/workspaces/:id/integration-snippets (Node.js + Python + Go templates)
+
+Verify: create app → client_id exists in Keycloak Admin
+
+Verify: invite admin → email appears in Mailpit with working link
+
+
+
+Day 4: Frontend Portal
+
+Goal
+
+Developer can log into the portal, see their workspace, create an app, and copy working integration code.
+
+
+
+Configure oidc-client-ts against foundry-saas realm
+
+Implement login redirect + callback route + token storage in memory
+
+Implement Dashboard page (tenant name, plan, MAU counter)
+
+Implement Apps list page + Create App form
+
+Implement App Detail page with syntax-highlighted integration snippets
+
+Implement Admins page with invite form
+
+Wire all pages to API client (generated from OpenAPI spec)
+
+Verify: full flow — sign in → create app → copy Node.js snippet → snippet validates JWT
+
+
+
+Day 5: Billing + Hardening
+
+Goal
+
+A customer can subscribe to a plan via Stripe Checkout. System enforces plan limits.
+
+
+
+Set up Stripe account, create products/prices for Starter and Growth
+
+Implement POST /v1/tenants/:id/billing/checkout
+
+Implement POST /v1/webhooks/stripe with signature verification
+
+Handle: subscription.created, subscription.updated, payment_failed
+
+Add plan limit enforcement: Starter → 1 workspace, Growth → 3 workspaces
+
+Implement rate limiting middleware (Redis-backed, 200 req/min per IP)
+
+Implement support access endpoint
+
+Add Billing page to frontend with plan display and Stripe Checkout button
+
+Verify: full billing flow in Stripe test mode → plan updates in DB → limits enforced
+
+
+
+Day 6: Docs + Final Polish
+
+Goal
+
+An external developer can read the docs, sign up, get tokens, and protect their API without asking a question.
+
+
+
+Set up Docusaurus with custom theme matching portal branding
+
+Write: Quickstart guide (Next.js integration, < 10 minutes)
+
+Write: Concepts — Tenants, Workspaces, Apps, Tokens
+
+Write: API Reference (point to auto-generated Swagger from OpenAPI YAML)
+
+Write: SDK reference (JavaScript copy-paste setup)
+
+End-to-end smoke test: create tenant → create app → protect Express route → login → verify token
+
+Fix any broken flows found in smoke test
+
+Tag release v1.0.0
+
+Ship
+
+
+
+
+SECTION 11
+
+6–12 Month Longevity Strategy
+
+
+
+
+This platform is designed to run for 6–12 months without a forced feature update. The following choices make that possible.
+
+11.1 Why This Stack Lasts
+
+Decision
+
+Why It Buys Time
+
+Keycloak 24 (Apache 2.0)
+
+Mature, LTS-supported release. No licence cost. Security patches available without major version changes. No vendor dependency.
+
+OpenID Connect + OAuth2
+
+20-year-old internet standards. Customer integrations written against these standards will not break.
+
+PostgreSQL 16
+
+Proven. No surprising deprecations. Prisma handles schema evolution cleanly.
+
+Redis 7
+
+Stable. No breaking changes expected in the 6–12 month horizon.
+
+Node.js 20 LTS
+
+Active LTS until April 2026. No forced upgrades required.
+
+React 18
+
+Stable. No forced upgrade pressure in the target window.
+
+Keycloak realm isolation
+
+Adding new tenants requires zero code changes — purely operational.
+
+API versioning (/v1)
+
+Customer integrations are pinned to v1. Breaking changes go to v2 without disrupting existing customers.
+
+
+
+11.2 What Will NOT Need Changing (Unless Customer Demands It)
+
+Core provisioning logic — realm template is stable once validated
+
+OIDC token flow — standards-based, will not break
+
+Billing integration — Stripe API is exceptionally stable
+
+Database schema — additive migrations only, no destructive changes
+
+Docker Compose dev setup — services are pinned to specific image tags
+
+
+
+11.3 Operational Playbook (Keeping It Running)
+
+Cadence
+
+Action
+
+Weekly
+
+Review Keycloak security advisories. Apply patch releases (24.x.y) — minor, no downtime.
+
+Monthly
+
+Flush usage counters from Redis to Postgres. Generate Stripe overage invoices. Review error rates in logs.
+
+Quarterly
+
+Review Postgres query performance. Add indexes if slow queries appear. Review Keycloak session counts vs. infrastructure capacity.
+
+Ad hoc
+
+Add new tenant: POST /v1/tenants — no code deployment required. Suspend tenant: PATCH /v1/tenants/:id { status: suspended }.
+
+
+
+11.4 When You WILL Need to Upgrade
+
+Triggers for Platform Updates
+
+These events require engineering effort but are predictable and plannable — not emergencies.
+
+
+
+Keycloak major version (24 → 25) — migration guide published by Red Hat, typically 2–4 days effort
+
+Customer requests SAML — estimate 5 days to add SAML protocol support
+
+Customer requests SCIM provisioning — estimate 7 days
+
+MAU exceeds 1M — scale Keycloak pods horizontally (no code change, only infra)
+
+Multi-region requirement — architectural change, estimate 2–3 weeks
+
+
+
+
+SECTION 12
+
+Definition of Done & Success Criteria
+
+
+
+
+12.1 MVP Definition of Done
+
+Pass / Fail Gate
+
+The platform is not shipped until all items below pass. No partial credit.
+
+
+
+#
+
+Criterion
+
+How to Verify
+
+1
+
+docker compose up starts all 7 services with no manual steps beyond cp .env.example .env
+
+Fresh checkout on a new machine, run make up
+
+2
+
+POST /v1/tenants creates a visible Keycloak realm within 10 seconds
+
+Keycloak Admin Console shows realm tnt_<id>
+
+3
+
+Realm contains correct roles: tenant_owner, tenant_admin, tenant_billing, tenant_viewer
+
+KC Admin → Realm → Roles
+
+4
+
+GET /v1/workspaces/:id/oidc returns valid OIDC discovery (issuer, jwks_uri, endpoints)
+
+Run against openid-configuration URL; tokens validate
+
+5
+
+Created app (public type) enforces PKCE — login without PKCE challenge is rejected
+
+Test with Postman without code_verifier
+
+6
+
+Admin invite email arrives in Mailpit with working invite link
+
+Trigger invite, check Mailpit
+
+7
+
+Integration snippet from App Detail page works copy-paste with no modification
+
+Create Express app, copy snippet, make authenticated request, check claims
+
+8
+
+Stripe Checkout flow completes in test mode and updates tenant.plan in DB
+
+Stripe test card 4242 4242 4242 4242
+
+9
+
+Rate limiter returns 429 after 200 requests within 60 seconds
+
+Automated load test
+
+10
+
+Docs site accessible and quickstart guide is accurate
+
+Follow guide start-to-finish on clean environment
+
+
+
+12.2 First Customer Criteria
+
+Commercial Readiness
+
+These are the additional items required before charging a real customer.
+
+
+
+Production TLS certificates on all public endpoints
+
+Keycloak Admin Console port NOT exposed publicly
+
+Postgres and Redis NOT exposed on public ports
+
+Stripe live mode keys configured and tested
+
+At least one backup of Postgres tested and restorable
+
+Monitoring: uptime check on /v1/health with alerting
+
+Support email address published in docs
+
+
+
+12.3 Revenue Milestones
+
+Milestone
+
+Target
+
+Metric
+
+First paying tenant
+
+Week 1 post-launch
+
+1 Starter subscription ($99/month)
+
+Break even on infra
+
+Month 2
+
+~15–20 Starter tenants ($1,500–2,000/month)
+
+FoundryOS funding threshold
+
+Month 6–12
+
+~165 tenants at avg $400/month = $66k/month = $792k ARR
+
+$2M ARR
+
+Month 12–18
+
+~415 Growth tenants OR 50 Enterprise OR 11M MAU
+
+
+
+End of Foundry IAM Platform Specification v1.0.0
+
+This document is the contract. Build to it.

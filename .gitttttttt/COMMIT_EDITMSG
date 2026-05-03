@@ -1,0 +1,10 @@
+Add custom identity provider federation for enterprise SSO login
+
+Implement the custom federation feature, enabling users to log in with their existing enterprise identity providers (Okta, Azure AD, Google). This includes database schema changes, API endpoints for CRUD operations on identity providers and attribute mappers, and new portal pages for managing federation settings.
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: 972a5625-8fdd-41e3-a678-be48fc0d1f85
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: 773eac69-e9bd-4cd9-8540-206228733e23
+Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/c022f240-614c-4a32-b433-26ca234b9659/972a5625-8fdd-41e3-a678-be48fc0d1f85/ADf7zAe
+Replit-Helium-Checkpoint-Created: true

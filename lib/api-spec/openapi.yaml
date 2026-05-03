@@ -1,0 +1,1014 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 1.0.0
+  description: Foundry IAM Control Plane API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: tenants
+    description: Tenant management
+  - name: workspaces
+    description: Workspace management
+  - name: apps
+    description: App (OIDC client) management
+  - name: admins
+    description: Admin user management
+  - name: billing
+    description: Billing and subscription management
+  - name: meta
+    description: Platform metadata and audit logs
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /v1/tenants:
+    post:
+      operationId: createTenant
+      tags: [tenants]
+      summary: Create a tenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTenantRequest"
+      responses:
+        "201":
+          description: Tenant created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateTenantResponse"
+        "409":
+          description: Slug already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/tenants/{id}:
+    get:
+      operationId: getTenant
+      tags: [tenants]
+      summary: Get tenant by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tenant found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateTenant
+      tags: [tenants]
+      summary: Update tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTenantRequest"
+      responses:
+        "200":
+          description: Tenant updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantResponse"
+    delete:
+      operationId: deleteTenant
+      tags: [tenants]
+      summary: Soft-delete tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /v1/tenants/{id}/usage:
+    get:
+      operationId: getTenantUsage
+      tags: [tenants]
+      summary: Get usage metrics for a tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Usage data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageResponse"
+
+  /v1/tenants/{tenantId}/workspaces:
+    post:
+      operationId: createWorkspace
+      tags: [workspaces]
+      summary: Create a workspace under a tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceRequest"
+      responses:
+        "201":
+          description: Workspace created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+    get:
+      operationId: listWorkspaces
+      tags: [workspaces]
+      summary: List workspaces for a tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workspace list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceListResponse"
+
+  /v1/workspaces/{id}/oidc:
+    get:
+      operationId: getWorkspaceOidc
+      tags: [workspaces]
+      summary: Get OIDC metadata for a workspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OIDC metadata
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/workspaces/{id}/integration-snippets:
+    get:
+      operationId: getIntegrationSnippets
+      tags: [workspaces]
+      summary: Get SDK integration code snippets
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Integration snippets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationSnippetsResponse"
+
+  /v1/workspaces/{id}/apps:
+    post:
+      operationId: createApp
+      tags: [apps]
+      summary: Create an OIDC app in a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAppRequest"
+      responses:
+        "201":
+          description: App created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppResponse"
+    get:
+      operationId: listApps
+      tags: [apps]
+      summary: List apps in a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: App list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppListResponse"
+
+  /v1/workspaces/{id}/apps/{appId}:
+    get:
+      operationId: getApp
+      tags: [apps]
+      summary: Get an app
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: App detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppResponse"
+
+  /v1/workspaces/{id}/apps/{appId}/client-secret/rotate:
+    post:
+      operationId: rotateClientSecret
+      tags: [apps]
+      summary: Rotate client secret for a confidential app
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: New secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RotateSecretResponse"
+
+  /v1/workspaces/{id}/admins/invite:
+    post:
+      operationId: inviteAdmin
+      tags: [admins]
+      summary: Invite an admin to a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteAdminRequest"
+      responses:
+        "201":
+          description: Admin invited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminResponse"
+
+  /v1/workspaces/{id}/admins:
+    get:
+      operationId: listAdmins
+      tags: [admins]
+      summary: List admins in a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Admin list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminListResponse"
+
+  /v1/workspaces/{id}/admins/{adminId}:
+    delete:
+      operationId: removeAdmin
+      tags: [admins]
+      summary: Remove an admin from a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: adminId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+
+  /v1/workspaces/{id}/support/access:
+    post:
+      operationId: toggleSupportAccess
+      tags: [workspaces]
+      summary: Enable or disable support access
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupportAccessRequest"
+      responses:
+        "200":
+          description: Support access updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/tenants/{tenantId}/billing/checkout:
+    post:
+      operationId: createCheckout
+      tags: [billing]
+      summary: Create billing checkout session
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutRequest"
+      responses:
+        "200":
+          description: Checkout session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+
+  /v1/tenants/{tenantId}/billing/plans:
+    get:
+      operationId: listPlans
+      tags: [billing]
+      summary: List available billing plans
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plans list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlansResponse"
+
+  /v1/webhooks/stripe:
+    post:
+      operationId: stripeWebhook
+      tags: [billing]
+      summary: Stripe webhook receiver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Acknowledged
+
+  /v1/meta/realm-template:
+    get:
+      operationId: getRealmTemplate
+      tags: [meta]
+      summary: Get default realm configuration template
+      responses:
+        "200":
+          description: Realm template
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/meta/audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [meta]
+      summary: List audit log entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenant_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+            details:
+              type: object
+
+    Tenant:
+      type: object
+      required: [id, name, slug, status, plan, region, mfa_policy, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [pending, active, suspended, deleted]
+        plan:
+          type: string
+          enum: [starter, growth, enterprise]
+        region:
+          type: string
+        mfa_policy:
+          type: string
+          enum: [disabled, optional, required-admins, required-all]
+        stripe_customer_id:
+          type: string
+          nullable: true
+        stripe_subscription_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    TenantResponse:
+      type: object
+      required: [tenant]
+      properties:
+        tenant:
+          $ref: "#/components/schemas/Tenant"
+
+    CreateTenantRequest:
+      type: object
+      required: [name, slug, owner]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        owner:
+          type: object
+          required: [email, full_name]
+          properties:
+            email:
+              type: string
+              format: email
+            full_name:
+              type: string
+        mode:
+          type: string
+          enum: [shared-realm, isolated-realm]
+          default: shared-realm
+        region:
+          type: string
+          default: us-east-1
+        plan:
+          type: string
+          enum: [starter, growth, enterprise]
+          default: starter
+        mfa_policy:
+          type: string
+          enum: [disabled, optional, required-admins, required-all]
+          default: optional
+
+    CreateTenantResponse:
+      type: object
+      required: [tenant, workspace]
+      properties:
+        tenant:
+          $ref: "#/components/schemas/Tenant"
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+        owner_invite_token:
+          type: string
+
+    UpdateTenantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        plan:
+          type: string
+          enum: [starter, growth, enterprise]
+        status:
+          type: string
+          enum: [active, suspended]
+        mfa_policy:
+          type: string
+          enum: [disabled, optional, required-admins, required-all]
+
+    Workspace:
+      type: object
+      required: [id, name, mode, status, keycloak]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [shared-realm, isolated-realm]
+        status:
+          type: string
+          enum: [provisioning, active, error, suspended]
+        is_default:
+          type: boolean
+        keycloak:
+          type: object
+          properties:
+            realm:
+              type: string
+            issuer:
+              type: string
+            jwks_uri:
+              type: string
+            well_known:
+              type: string
+
+    WorkspaceResponse:
+      type: object
+      required: [workspace]
+      properties:
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+
+    WorkspaceListResponse:
+      type: object
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workspace"
+
+    CreateWorkspaceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [shared-realm, isolated-realm]
+          default: isolated-realm
+
+    App:
+      type: object
+      required: [id, workspace_id, name, type, pkce, scopes, redirect_uris, oidc, created_at]
+      properties:
+        id:
+          type: string
+        workspace_id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [public, confidential]
+        pkce:
+          type: string
+          enum: [required, optional, disabled]
+        scopes:
+          type: array
+          items:
+            type: string
+        redirect_uris:
+          type: array
+          items:
+            type: string
+        access_token_seconds:
+          type: integer
+        refresh_token_seconds:
+          type: integer
+        oidc:
+          type: object
+          properties:
+            client_id:
+              type: string
+            client_secret:
+              type: string
+              nullable: true
+            issuer:
+              type: string
+            authorization_endpoint:
+              type: string
+            token_endpoint:
+              type: string
+            jwks_uri:
+              type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AppResponse:
+      type: object
+      required: [app]
+      properties:
+        app:
+          $ref: "#/components/schemas/App"
+
+    AppListResponse:
+      type: object
+      required: [apps]
+      properties:
+        apps:
+          type: array
+          items:
+            $ref: "#/components/schemas/App"
+
+    CreateAppRequest:
+      type: object
+      required: [name, redirect_uris]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [public, confidential]
+          default: public
+        redirect_uris:
+          type: array
+          items:
+            type: string
+        post_logout_redirect_uris:
+          type: array
+          items:
+            type: string
+        web_origins:
+          type: array
+          items:
+            type: string
+        pkce:
+          type: string
+          enum: [required, optional, disabled]
+          default: required
+        scopes:
+          type: array
+          items:
+            type: string
+        token_lifetimes:
+          type: object
+          properties:
+            access_token_seconds:
+              type: integer
+            refresh_token_seconds:
+              type: integer
+
+    RotateSecretResponse:
+      type: object
+      required: [client_id, client_secret, rotated_at]
+      properties:
+        client_id:
+          type: string
+        client_secret:
+          type: string
+        rotated_at:
+          type: string
+          format: date-time
+
+    Admin:
+      type: object
+      required: [id, email, full_name, role, status, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, billing, viewer]
+        status:
+          type: string
+          enum: [invited, active, suspended]
+        created_at:
+          type: string
+          format: date-time
+
+    AdminResponse:
+      type: object
+      required: [admin]
+      properties:
+        admin:
+          $ref: "#/components/schemas/Admin"
+
+    AdminListResponse:
+      type: object
+      required: [admins]
+      properties:
+        admins:
+          type: array
+          items:
+            $ref: "#/components/schemas/Admin"
+
+    InviteAdminRequest:
+      type: object
+      required: [email, full_name]
+      properties:
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [admin, billing, viewer]
+          default: admin
+
+    SupportAccessRequest:
+      type: object
+      required: [enabled, reason]
+      properties:
+        enabled:
+          type: boolean
+        reason:
+          type: string
+        duration_minutes:
+          type: integer
+          default: 60
+
+    CheckoutRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan:
+          type: string
+          enum: [starter, growth, enterprise]
+        success_url:
+          type: string
+        cancel_url:
+          type: string
+
+    CheckoutResponse:
+      type: object
+      required: [checkout_url, plan]
+      properties:
+        checkout_url:
+          type: string
+        checkout_session_id:
+          type: string
+        plan:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        billing_period:
+          type: string
+
+    PlansResponse:
+      type: object
+      required: [plans]
+      properties:
+        plans:
+          type: array
+          items:
+            type: object
+
+    UsageResponse:
+      type: object
+      required: [tenant_id, usage]
+      properties:
+        tenant_id:
+          type: string
+        usage:
+          type: object
+          properties:
+            mau:
+              type: integer
+            logins:
+              type: integer
+            token_refresh:
+              type: integer
+        snapshots:
+          type: array
+          items:
+            type: object
+
+    IntegrationSnippetsResponse:
+      type: object
+      required: [workspace_id, issuer, jwks_uri, snippets]
+      properties:
+        workspace_id:
+          type: string
+        issuer:
+          type: string
+        jwks_uri:
+          type: string
+        snippets:
+          type: object
+          properties:
+            nodejs:
+              type: string
+            python:
+              type: string
+            go:
+              type: string
+
+    AuditLog:
+      type: object
+      required: [id, action, resource_type, resource_id, created_at]
+      properties:
+        id:
+          type: integer
+        tenant_id:
+          type: string
+          nullable: true
+        workspace_id:
+          type: string
+          nullable: true
+        actor_id:
+          type: string
+        actor_email:
+          type: string
+          nullable: true
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        previous_state:
+          type: string
+          nullable: true
+        new_state:
+          type: string
+          nullable: true
+        ip_address:
+          type: string
+          nullable: true
+        source_screen:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    AuditLogListResponse:
+      type: object
+      required: [audit_logs]
+      properties:
+        audit_logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
