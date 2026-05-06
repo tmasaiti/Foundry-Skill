@@ -3,6 +3,7 @@ import { useParams, Link } from "wouter";
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CopyButton } from "@/components/CopyButton";
+import { DetailNav } from "@/components/DetailNav";
 import { MOCK_WORKSPACES, MOCK_APPS, MOCK_ADMINS } from "@/lib/mockData";
 import { Layers, Cpu, Users, ExternalLink, Plus, ChevronRight } from "lucide-react";
 
@@ -16,6 +17,10 @@ export default function WorkspaceDetail() {
       <p className="text-muted-foreground">Workspace not found. <Link href="/workspaces" className="text-primary hover:underline">Back to workspaces</Link></p>
     </Layout>
   );
+
+  const wsIndex = MOCK_WORKSPACES.findIndex(w => w.id === id);
+  const prevWs = wsIndex > 0 ? MOCK_WORKSPACES[wsIndex - 1] : null;
+  const nextWs = wsIndex < MOCK_WORKSPACES.length - 1 ? MOCK_WORKSPACES[wsIndex + 1] : null;
 
   const wsApps = MOCK_APPS.filter(a => a.workspace_id === ws.id);
   const wsAdmins = MOCK_ADMINS.filter(a => a.workspace_id === ws.id);
@@ -34,6 +39,15 @@ export default function WorkspaceDetail() {
       ]}
       title={ws.name}
     >
+      <DetailNav
+        backHref="/workspaces"
+        backLabel="All Workspaces"
+        prevHref={prevWs ? `/workspaces/${prevWs.id}` : null}
+        nextHref={nextWs ? `/workspaces/${nextWs.id}` : null}
+        prevLabel={prevWs?.name}
+        nextLabel={nextWs?.name}
+      />
+
       {/* Header card */}
       <div className="rounded-xl border border-border bg-card px-5 py-4 mb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">

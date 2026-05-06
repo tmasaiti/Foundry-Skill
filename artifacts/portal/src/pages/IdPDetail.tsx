@@ -3,6 +3,7 @@ import { useParams, Link } from "wouter";
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CopyButton } from "@/components/CopyButton";
+import { DetailNav } from "@/components/DetailNav";
 import { MOCK_IDENTITY_PROVIDERS } from "@/lib/mockData";
 import {
   AlertTriangle, CheckCircle2, ExternalLink, Plus, Trash2, Edit2,
@@ -110,6 +111,10 @@ export default function IdPDetail() {
     );
   }
 
+  const idpIndex = MOCK_IDENTITY_PROVIDERS.findIndex((p) => p.id === params.id);
+  const prevIdp = idpIndex > 0 ? MOCK_IDENTITY_PROVIDERS[idpIndex - 1] : null;
+  const nextIdp = idpIndex < MOCK_IDENTITY_PROVIDERS.length - 1 ? MOCK_IDENTITY_PROVIDERS[idpIndex + 1] : null;
+
   const typeInfo = TYPE_LABELS[idp.type] ?? { label: idp.type, proto: idp.type };
   const realm = "tnt_01h9xk2p3q4r5s6t7u8v";
   const callbackUrl = `https://id.foundry-iam.dev/realms/${realm}/broker/${idp.alias}/endpoint`;
@@ -156,6 +161,15 @@ export default function IdPDetail() {
         </a>
       }
     >
+      <DetailNav
+        backHref="/identity-providers"
+        backLabel="All Identity Providers"
+        prevHref={prevIdp ? `/identity-providers/${prevIdp.id}` : null}
+        nextHref={nextIdp ? `/identity-providers/${nextIdp.id}` : null}
+        prevLabel={prevIdp?.display_name}
+        nextLabel={nextIdp?.display_name}
+      />
+
       {/* Header — WHO, WHAT STATUS, WHAT CAN I DO */}
       <div className="rounded-xl border border-border bg-card px-5 py-4 mb-5 flex flex-wrap items-start gap-4 justify-between">
         <div className="flex items-center gap-3">

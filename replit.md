@@ -126,9 +126,17 @@ Tables created/pushed via `pnpm --filter @workspace/db run push`:
 
 ## Frontend Pages (`/portal`)
 
+**Onboarding (public routes — no auth required)**
+- `/signup` — Split-panel sign-up: full name, work email, org name, password (12+ chars, uppercase, digit, symbol strength checker), confirm password, terms checkbox
+- `/verify-email` — Post-signup holding screen; shows email address, 3-step instructions, Resend button (60s rate-limited), demo bypass to survey
+- `/onboarding/survey` — 4-screen intent survey: (1) apps to integrate (multi-select tiles), (2) user source (single-select tiles), (3) features interested in (multi-select), (4) free-text notes (500 char max); skip link, progress steps
+
+**Authenticated routes**
+- `/getting-started` — Checklist dashboard: 5-item completion checklist (add app, import users, add admin, select auth, require MFA), progress bar + %, "Explore the platform" quick-access grid
 - `/login` — Split-panel brand login page
 - `/` — Dashboard with MAU trend, workspace/app overview, recent activity
-- `/apps` — Filterable app list with PKCE/type badges
+- `/apps` — Filterable app list with PKCE/type badges; "New App" opens integration-type selection modal (OIDC [default], SAML 2.0, SWA, API Services) then routes to correct wizard
+- `/apps/new` — 4-step OIDC app creation wizard: (1) Name/Type (public/confidential, PKCE, workspace), (2) Redirect URIs (+ post-logout + web origins), (3) Token Lifetimes (sliders, scope selector), (4) Review & Create
 - `/apps/:appId` — App detail with OIDC config, integration snippets (Node/Python/Go), secret rotation workflow
 - `/workspaces` — Workspace list with realm info, create modal
 - `/workspaces/:id` — Workspace detail with tabs (Apps, Team, Realm endpoints)
@@ -151,6 +159,19 @@ Tables created/pushed via `pnpm --filter @workspace/db run push`:
 ## UIUX Doctrine Compliance
 
 Every screen answers the 5 questions: WHO is responsible / WHAT is the current status / WHAT CHANGED / WHAT CAN I DO / WHAT WILL HAPPEN. Status badges carry operational consequences (active = green + dot, provisioning = blue + pulse, error = red). Record lineage is visible on all detail pages (created-at, actor email, previous→new state in audit logs). Workflow-first: secret rotation shows impact before confirming, workspace creation shows plan limits inline.
+
+## lib/ Folder Structure (api-server)
+
+`artifacts/api-server/src/lib/` contains four internal utility modules that every route, middleware, and service depends on:
+
+| File | Exports |
+|------|---------|
+| `logger.ts` | `logger` — Pino logger instance (pretty in dev, JSON in prod) |
+| `errors.ts` | `AppError`, `NotFoundError`, `ValidationError`, `ConflictError`, `UnauthorizedError`, `ForbiddenError`, `RateLimitError`, `errorResponse` |
+| `inMemoryStore.ts` | `rateLimit` (sliding-window counter), `idempotency` (24h TTL response cache) |
+| `ulid.ts` | `makeId(prefix)` — generates prefixed ULID strings (e.g. `tnt_01J...`) |
+
+These files are **not** generated — do not delete or move them.
 
 ## Known Architectural Decisions
 

@@ -4,22 +4,23 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Boxes, Layers, Users, CreditCard,
   ScrollText, Settings, LogOut, ChevronRight, Shield,
-  Bell, Menu, X, Key, RefreshCcw, Network
+  Bell, Menu, Key, RefreshCcw, Network, Sparkles,
 } from "lucide-react";
 import { useState } from "react";
 import { MOCK_TENANT } from "@/lib/mockData";
 
 const NAV = [
-  { href: "/",           icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/apps",       icon: Boxes,           label: "Apps" },
-  { href: "/saml",       icon: Key,             label: "SAML" },
-  { href: "/scim",       icon: RefreshCcw,      label: "SCIM" },
-  { href: "/identity-providers", icon: Network, label: "Federation" },
-  { href: "/workspaces", icon: Layers,          label: "Workspaces" },
-  { href: "/team",       icon: Users,           label: "Team" },
-  { href: "/billing",    icon: CreditCard,      label: "Billing" },
-  { href: "/audit-logs", icon: ScrollText,      label: "Audit Logs" },
-  { href: "/settings",   icon: Settings,        label: "Settings" },
+  { href: "/getting-started", icon: Sparkles,        label: "Getting Started" },
+  { href: "/",                icon: LayoutDashboard,  label: "Dashboard" },
+  { href: "/apps",            icon: Boxes,            label: "Apps" },
+  { href: "/saml",            icon: Key,              label: "SAML" },
+  { href: "/scim",            icon: RefreshCcw,       label: "SCIM" },
+  { href: "/identity-providers", icon: Network,       label: "Federation" },
+  { href: "/workspaces",      icon: Layers,           label: "Workspaces" },
+  { href: "/team",            icon: Users,            label: "Team" },
+  { href: "/billing",         icon: CreditCard,       label: "Billing" },
+  { href: "/audit-logs",      icon: ScrollText,       label: "Audit Logs" },
+  { href: "/settings",        icon: Settings,         label: "Settings" },
 ];
 
 interface LayoutProps {
@@ -66,6 +67,7 @@ export function Layout({ children, title, breadcrumbs, actions }: LayoutProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
         {NAV.map(({ href, icon: Icon, label }) => {
           const active = href === "/" ? location === "/" : location.startsWith(href);
+          const isGettingStarted = href === "/getting-started";
           return (
             <Link
               key={href}
@@ -75,6 +77,8 @@ export function Layout({ children, title, breadcrumbs, actions }: LayoutProps) {
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                 active
                   ? "bg-sidebar-primary/15 text-sidebar-primary font-medium"
+                  : isGettingStarted
+                  ? "text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground font-medium"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               )}
             >

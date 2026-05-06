@@ -4,6 +4,7 @@ import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CopyButton } from "@/components/CopyButton";
 import { CodeBlock } from "@/components/CodeBlock";
+import { DetailNav } from "@/components/DetailNav";
 import { MOCK_APPS, MOCK_WORKSPACES, MOCK_AUDIT_LOGS } from "@/lib/mockData";
 import { AlertTriangle, RefreshCw, ExternalLink, Info, Clock, User, Activity } from "lucide-react";
 
@@ -105,12 +106,16 @@ export default function AppDetail() {
   const [rotateOpen, setRotateOpen] = useState(false);
   const [rotated, setRotated] = useState(false);
 
-  const app = MOCK_APPS.find((a) => a.id === appId);
+  const appIndex = MOCK_APPS.findIndex((a) => a.id === appId);
+  const app = appIndex !== -1 ? MOCK_APPS[appIndex] : undefined;
   if (!app) return (
     <Layout title="App Not Found">
       <p className="text-muted-foreground">App not found. <Link href="/apps" className="text-primary hover:underline">Back to apps</Link></p>
     </Layout>
   );
+
+  const prevApp = appIndex > 0 ? MOCK_APPS[appIndex - 1] : null;
+  const nextApp = appIndex < MOCK_APPS.length - 1 ? MOCK_APPS[appIndex + 1] : null;
 
   const ws = MOCK_WORKSPACES.find(w => w.id === app.workspace_id);
   const snippets = getSnippets(app);
@@ -142,6 +147,15 @@ export default function AppDetail() {
         </div>
       }
     >
+      <DetailNav
+        backHref="/apps"
+        backLabel="All Apps"
+        prevHref={prevApp ? `/apps/${prevApp.id}` : null}
+        nextHref={nextApp ? `/apps/${nextApp.id}` : null}
+        prevLabel={prevApp?.name}
+        nextLabel={nextApp?.name}
+      />
+
       {/* Error callout — shown above everything else when the app is failing */}
       {isError && appWithExtras.error_reason && (
         <div className="mb-5 rounded-xl border border-l-4 border-red-200 border-l-red-500 bg-red-50/70 px-4 py-4 flex items-start gap-3">

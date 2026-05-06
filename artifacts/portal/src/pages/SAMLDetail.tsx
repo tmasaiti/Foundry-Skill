@@ -3,6 +3,7 @@ import { useParams, Link } from "wouter";
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CopyButton } from "@/components/CopyButton";
+import { DetailNav } from "@/components/DetailNav";
 import { MOCK_SAML_SPS, MOCK_WORKSPACES, MOCK_AUDIT_LOGS } from "@/lib/mockData";
 import {
   AlertTriangle, CheckCircle2, Download, FlaskConical, ExternalLink,
@@ -169,6 +170,10 @@ export default function SAMLDetail() {
     );
   }
 
+  const spIndex = MOCK_SAML_SPS.findIndex((s) => s.id === sspId);
+  const prevSp = spIndex > 0 ? MOCK_SAML_SPS[spIndex - 1] : null;
+  const nextSp = spIndex < MOCK_SAML_SPS.length - 1 ? MOCK_SAML_SPS[spIndex + 1] : null;
+
   const ws = MOCK_WORKSPACES.find((w) => w.id === sp.workspace_id);
   const spLogs = MOCK_AUDIT_LOGS.filter((l) => l.resource_id === sp.id)
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -235,6 +240,15 @@ export default function SAMLDetail() {
         </div>
       }
     >
+      <DetailNav
+        backHref="/saml"
+        backLabel="All SAML Providers"
+        prevHref={prevSp ? `/saml/${prevSp.id}` : null}
+        nextHref={nextSp ? `/saml/${nextSp.id}` : null}
+        prevLabel={prevSp?.name}
+        nextLabel={nextSp?.name}
+      />
+
       {/* Q2: Exception callout if disabled */}
       {isDisabled && (
         <div className="mb-5 rounded-xl border border-l-4 border-amber-200 border-l-amber-500 bg-amber-50/70 px-4 py-4 flex items-start gap-3">

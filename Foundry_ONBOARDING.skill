@@ -1,0 +1,1611 @@
+
+
+FOUNDRY IAM
+
+Onboarding Flow Specification
+
+OIDC · SAML 2.0 · SCIM · Custom Federation
+
+
+
+
+Document Type
+
+High-Fidelity Onboarding Specification
+
+Version
+
+v1.0
+
+Classification
+
+INTERNAL — CONFIDENTIAL
+
+Status
+
+APPROVED FOR DEVELOPMENT
+
+Complementary Specs
+
+Platform v1.0, SAML, SCIM, Federation
+
+Auth Protocols Covered
+
+OIDC (MVP), SAML 2.0, SCIM 2.0, Custom Federation / BYO IdP
+
+Prepared By
+
+Tawanda Masaiti
+
+Email
+
+tmasaiti@gmail.com
+
+Phone
+
+0772209275
+
+
+
+This document specifies the end-to-end onboarding user experience and system behaviour for all authentication types and platform integrations in Foundry IAM. It complements the Platform Specification v1.0, the SAML Extension, SCIM Provisioning, and Custom Federation specs. Every screen state, step sequence, field validation rule, API call, and error condition is defined herein. Engineers and product designers must follow this document as the single source of truth for onboarding implementation.
+
+
+
+1  Onboarding Architecture Overview
+
+1.1  Onboarding as a First-Class System Concern
+
+Onboarding is not a marketing concern — it is an engineering surface. Every step in the onboarding funnel makes API calls, creates database records, provisions Keycloak resources, and sends emails. This specification defines those calls with the same rigour as the core platform spec.
+
+Foundry IAM supports four primary onboarding pathways, each corresponding to an authentication protocol. These pathways share a common account creation flow and diverge at the point of credential/integration configuration.
+
+
+
+Protocol
+
+Phase
+
+Persona
+
+Trigger
+
+OIDC
+
+MVP — available at launch
+
+Developer / SaaS team
+
+Default for all new signups
+
+SAML 2.0
+
+Phase 2 — post-MVP
+
+Enterprise IT admin
+
+First enterprise deal requiring SAML SSO
+
+SCIM 2.0
+
+Phase 2 — post-MVP
+
+Enterprise IT admin
+
+HR/IdP automated provisioning requirement
+
+Custom Federation
+
+Phase 2 — post-MVP
+
+Enterprise IT admin
+
+Enterprise requiring SSO via existing corporate IdP
+
+
+
+1.2  Shared Onboarding Spine
+
+Steps 1–4 are identical across all pathways. Divergence occurs only at Step 5 when the user selects an integration type or begins configuring an application.
+
+
+
+#
+
+Step
+
+Actor
+
+System Action
+
+1
+
+Sign Up / Create Account
+
+New user
+
+POST /v1/auth/signup — create Tenant + Workspace + Keycloak realm
+
+2
+
+Email Verification
+
+New user
+
+Keycloak execute-actions-email (VERIFY_EMAIL)
+
+3
+
+Set Password
+
+New user
+
+Keycloak UPDATE_PASSWORD action; sets verified=true on confirmation
+
+4
+
+Intent Survey (4 screens)
+
+New user
+
+Persisted to tenant metadata; drives dashboard personalisation
+
+5
+
+Protocol Configuration ← DIVERGES
+
+User selects pathway
+
+OIDC / SAML / SCIM / Federation branch
+
+
+
+1.3  Intent Survey — Screen Sequence & Design Specification
+
+A 4-screen intent survey is the defined pattern for Foundry IAM onboarding. The responses drive dashboard personalisation and inform the Getting Started checklist priority order.
+
+
+
+Screen
+
+Question
+
+Options / Field
+
+1 of 4
+
+Priority apps to integrate
+
+Multi-select tiles: Active Directory, Office 365, Google Workspace, Slack, Zoom, Salesforce, AWS IAM, Atlassian Cloud, Dropbox, Datadog, PagerDuty, Other
+
+2 of 4
+
+Where are your users imported from?
+
+Single-select tiles: Active Directory, SuccessFactors, Office 365, CSV/XLS import, Google Workspace, Workday, Other
+
+3 of 4
+
+What features are you most interested in?
+
+Multi-select: Single Sign-On (SSO), Automation & Workflows, Multi-Factor Authentication, Authentication Capabilities, Identity Governance & Administration, Other
+
+4 of 4
+
+What do you want to solve with Foundry IAM?
+
+Free-text textarea — saved to tenant.intent_notes. Max 500 chars.
+
+
+
+2  Account Creation & Shared Steps (All Protocols)
+
+2.1  Sign-Up Screen
+
+Route: /signup — Public, unauthenticated
+
+
+
+2.1.1  Fields
+
+Field
+
+Type
+
+Validation
+
+Notes
+
+Full Name
+
+text
+
+Required, 2–255 chars
+
+Full Name
+
+text
+
+Required, 2–255 chars
+
+Stored on admins.full_name
+
+Work Email
+
+email
+
+Required, valid email format, domain not blocked
+
+Becomes login credential
+
+Organisation Name
+
+text
+
+Required, 2–255 chars, trimmed
+
+Stored on tenants.name; slug auto-derived
+
+Password
+
+password
+
+Min 12 chars, 1 uppercase, 1 digit, 1 symbol
+
+Never stored in control plane; sent to Keycloak
+
+Confirm Password
+
+password
+
+Must match Password
+
+Client-side validation only
+
+Agree to Terms
+
+checkbox
+
+Must be checked
+
+Terms URL in footer of form
+
+
+
+2.1.2  API Calls on Submit
+
+POST /v1/auth/signup
+
+Request body:
+
+full_name, email, organisation_name, password
+
+System actions on success (in order):
+
+1. Validate email not already registered (409 conflict if duplicate)
+
+2. Create tenants record (status=pending)
+
+3. Create workspaces record (mode=shared-realm, status=provisioning)
+
+4. Create Keycloak realm (tnt_<ulid>) — full bootstrap sequence per Platform Spec §5.1
+
+5. Create owner user in Keycloak realm
+
+6. Create admins record (role=owner, status=invited)
+
+7. Trigger Keycloak execute-actions-email: VERIFY_EMAIL
+
+8. Return 201 — redirect to /verify-email
+
+
+
+2.1.3  Error States
+
+HTTP
+
+Error Code
+
+User-Facing Message
+
+409
+
+email_already_registered
+
+An account with this email already exists. Sign in instead.
+
+422
+
+password_too_weak
+
+Password must be at least 12 characters and include uppercase, digit, and symbol.
+
+422
+
+domain_blocked
+
+Please use your work email address to create an account.
+
+500
+
+provisioning_failed
+
+We could not create your account. Our team has been notified. Try again in a few minutes.
+
+
+
+2.2  Email Verification
+
+Route: /verify-email — Post-signup holding screen
+
+Screen displays: "We sent a verification link to {email}. Click the link to continue." with a Resend Email button (rate-limited: 1 per 60 seconds per email address).
+
+Keycloak handles the verification link. On click, Keycloak marks email_verified=true and redirects to the password-set screen (if password not yet set) or directly to the intent survey.
+
+⚠  Verification links expire after 24 hours. Expired links redirect to /verify-email with error=link_expired.
+
+
+
+2.3  Intent Survey Persistence
+
+Survey responses are stored as JSONB on tenants.metadata under the key onboarding_survey. The control plane does not act on these values during MVP but they are available for dashboard personalisation and sales intelligence.
+
+PATCH /v1/tenants/:id — { "metadata": { "onboarding_survey": { "apps": [...], "source": "...", "features": [...], "notes": "..." } } }
+
+
+
+2.4  Getting Started Dashboard
+
+Route: /getting-started — First authenticated view after survey completion. Contains a prioritised checklist driven by survey responses. Completion state of each item is tracked and updated as the tenant progresses through setup.
+
+
+
+Checklist Item
+
+Completion Trigger
+
+CTA Button
+
+Add users to Foundry IAM
+
+First non-owner admin created
+
+Import Users
+
+Add an app to use Single Sign-On
+
+First app created in workspace
+
+Add App
+
+Add another workspace admin
+
+Second admin invited
+
+Add Admin
+
+Select authentication method
+
+MFA policy set (non-default)
+
+Select Authenticators
+
+Require MFA to access Foundry IAM
+
+MFA policy = required-all
+
+Configure Policy
+
+
+
+3  OIDC Onboarding — Primary Pathway (MVP)
+
+OIDC is the default and only MVP protocol. All signups go through this path. The goal is a working OIDC login in under 30 minutes from account creation.
+
+3.1  App Creation Flow
+
+Route: /apps/new — Accessible from Getting Started CTA or sidebar navigation
+
+
+
+Step 1  Name Your App
+
+User enters a display name for the application (e.g. "Acme Web App"). App type selection: Public (SPA, mobile — PKCE required) or Confidential (server-side — client secret issued). PKCE is pre-selected and locked for Public type.
+
+Step 2  Set Redirect URIs
+
+User enters one or more redirect URIs. Validation: must be HTTPS in production (HTTP localhost allowed in dev). Minimum one URI required. Post-logout redirect URIs field (optional). Web origins field (optional — for CORS).
+
+Step 3  Configure Token Lifetimes
+
+Access token lifetime (default 15 minutes, range 5–60 min). Refresh token lifetime (default 30 days, range 1–90 days). Scopes: openid, profile, email pre-selected and locked; additional scopes can be added.
+
+Step 4  Review & Create
+
+Summary of all settings. Create App button calls POST /v1/workspaces/:id/apps. On success, navigate to App Detail / Integration page.
+
+
+
+3.2  OIDC Integration Page (App Detail)
+
+Route: /apps/:id — The primary developer output. This page must be immediately actionable. A developer should be able to copy values and have working auth in their framework within minutes.
+
+
+
+3.2.1  Displayed Values
+
+Value
+
+Source
+
+Format
+
+Issuer URL
+
+https://id.{domain}/realms/tnt_{id}
+
+Copyable text field
+
+Client ID
+
+app_{ulid} — Keycloak client ID
+
+Copyable text field
+
+Client Secret
+
+Keycloak client secret (confidential apps only)
+
+Masked + reveal toggle + copy
+
+OIDC Discovery URL
+
+{issuer}/.well-known/openid-configuration
+
+Copyable + open-in-browser
+
+Authorization Endpoint
+
+{issuer}/protocol/openid-connect/auth
+
+Read-only display
+
+Token Endpoint
+
+{issuer}/protocol/openid-connect/token
+
+Read-only display
+
+JWKS URI
+
+{issuer}/protocol/openid-connect/certs
+
+Read-only display
+
+UserInfo Endpoint
+
+{issuer}/protocol/openid-connect/userinfo
+
+Read-only display
+
+
+
+3.2.2  Framework Quickstart Tabs
+
+Code snippets displayed in syntax-highlighted tabs. Each tab contains a complete, copy-paste-ready integration example using the displayed client ID and issuer URL substituted in.
+
+Next.js (next-auth)
+
+Express.js (passport-oidc)
+
+FastAPI (authlib)
+
+React SPA (oidc-client-ts)
+
+Vue 3 (vue-oidc-client)
+
+Environment variables (.env)
+
+
+
+3.3  OIDC App Management — New App Integration Modal
+
+Route: /apps — "Create a new app integration" modal — sign-in method selection
+
+Sign-in method selection:
+
+OIDC — OpenID Connect: Token-based OAuth 2.0 authentication for SSO through API endpoints. Recommended for custom app integrations. Supports the Foundry IAM Sign-In Widget and direct PKCE flows. [DEFAULT]
+
+SAML 2.0: XML-based open standard for SSO. Use if the Identity Provider for the application only supports SAML.
+
+SWA — Secure Web Authentication: Foundry IAM-specific SSO method. Use if the application does not support OIDC or SAML.
+
+API Services: Interact with Foundry IAM APIs using scoped OAuth 2.0 access tokens for machine-to-machine authentication.
+
+ℹ  SAML 2.0 and API Services selections route to their respective onboarding flows defined in Sections 4 and 7 of this document.
+
+
+
+4  SAML 2.0 Onboarding — Enterprise SSO
+
+SAML onboarding is triggered when a user selects "SAML 2.0" from the new app integration modal, or navigates to /saml/new directly. This pathway is gated to Growth and Enterprise plan tenants.
+
+4.1  Pre-Flight Check
+
+⚠  SAML is a Phase 2 feature. Starter plan users who click SAML will see an upgrade prompt. The upgrade CTA links to the billing page.
+
+
+
+4.2  SAML Service Provider Registration Flow
+
+Route: /saml/new — Two-tab registration interface
+
+
+
+4.2.1  Tab 1 — Upload Metadata (Recommended)
+
+This tab is the default and must be prominently labelled as recommended. Metadata upload is less error-prone than manual configuration.
+
+File upload input — accepts .xml files, max 1MB
+
+Paste textarea — user can paste raw XML directly
+
+On paste or file upload, the system immediately parses the XML client-side:
+
+If valid: extract and display entityId, ACS URL, SLO URL, signing certificate thumbprint in a read-only preview table with a green "Valid Metadata" badge
+
+If invalid XML: red badge with specific error location (line, column)
+
+If valid XML but missing required fields: red badge listing missing fields
+
+ℹ  Required fields in SP metadata: EntityDescriptor entityID, AssertionConsumerService Location, SPSSODescriptor protocolSupportEnumeration.
+
+
+
+4.2.2  Tab 2 — Manual Configuration
+
+Field
+
+Required
+
+Type
+
+Notes
+
+SP Entity ID
+
+Yes
+
+text (URL)
+
+Unique identifier of the SP. Usually a URL.
+
+Assertion Consumer Service URL
+
+Yes
+
+text (URL)
+
+HTTPS required in production.
+
+Single Logout URL
+
+No
+
+text (URL)
+
+Leave empty if SP does not support SLO.
+
+NameID Format
+
+Yes
+
+select
+
+Options: Email (default), Persistent, Transient, Unspecified
+
+SP Signing Certificate
+
+No
+
+textarea (PEM)
+
+Paste SP certificate for request signing validation.
+
+
+
+4.2.3  Common Fields (Both Tabs)
+
+Field
+
+Required
+
+Notes
+
+Name
+
+Yes
+
+Human label, e.g. "Salesforce Production". Stored as saml_service_providers.name.
+
+Sign Assertions
+
+Yes
+
+Toggle — default ON. Required for all production SPs.
+
+Encrypt Assertions
+
+Yes
+
+Toggle — default OFF. Enable for SPs requiring encrypted assertions.
+
+Attribute Mappings
+
+No
+
+Dynamic table: add/remove rows. Left: Keycloak attribute. Right: SAML attribute name. Format dropdown: Basic / URI.
+
+
+
+4.3  SAML Registration API Call
+
+POST /v1/workspaces/:id/saml/service-providers
+
+System actions on success:
+
+1. Validate metadata XML (if upload mode) or manual fields
+
+2. POST /admin/realms/{realm}/clients — create SAML client in Keycloak (protocol=saml)
+
+3. Apply attribute mappers to Keycloak client
+
+4. Persist saml_service_providers record in control plane DB
+
+5. Return 201 with sp details and idp_metadata_url
+
+
+
+4.4  SAML Detail Page — Post-Registration
+
+Route: /saml/:id — Immediate destination after successful SP registration
+
+
+
+"Give This to Your SP" Section
+
+This section must appear at the top of the page. It contains what the customer must give to their SP to complete the integration.
+
+IdP Metadata URL: {issuer}/protocol/saml/descriptor — copyable + open link
+
+Download IdP Metadata XML button — triggers GET /v1/workspaces/:id/saml/idp-metadata
+
+Signing Certificate download (PEM format) — for SPs that require manual cert upload
+
+EntityID: {issuer} — copyable
+
+SSO URL (POST binding): {issuer}/protocol/saml — copyable
+
+SSO URL (Redirect binding): {issuer}/protocol/saml — copyable
+
+
+
+SP-Specific Integration Guides
+
+SP
+
+Key Steps
+
+Salesforce
+
+Setup → Single Sign-On Settings → New → SAML Enabled → paste IdP EntityID, SSO URL, Certificate
+
+Google Workspace
+
+Admin Console → Apps → Web and mobile apps → Add SAML app → upload IdP metadata XML
+
+Azure AD / M365
+
+Azure Portal → Enterprise Applications → New (non-gallery) → Set up single sign-on → SAML → upload metadata XML
+
+ServiceNow
+
+System Properties → SSO → SAML 2.0 → Import IdP metadata XML
+
+Generic SP
+
+Provide IdP metadata XML URL. Configure ACS URL, EntityID, NameID format as shown above.
+
+
+
+5  SCIM 2.0 Onboarding — Automated Provisioning
+
+SCIM onboarding is accessed via the workspace sidebar: Settings → SCIM Provisioning. It is gated to Growth and Enterprise plan tenants. The flow enables enterprise customers to connect their HR system or Identity Provider for automated user lifecycle management.
+
+5.1  SCIM Activation Flow
+
+Route: /scim — SCIM Configuration page
+
+
+
+5.1.1  Disabled State
+
+Large "Enable SCIM Provisioning" CTA button. One-sentence explainer: "Connect your Identity Provider to automatically create, update, and deactivate users in Foundry IAM." Link to SCIM setup guide.
+
+Plan check: if Starter plan, replace button with upgrade prompt.
+
+
+
+5.1.2  Activation Modal — Critical UX
+
+On clicking Enable SCIM Provisioning:
+
+Modal appears: "Your SCIM Bearer Token will only be displayed once. Copy it now and store it securely."
+
+Checkbox: "I understand this token will not be shown again." — must be checked before proceeding.
+
+Confirm button calls POST /v1/workspaces/:id/scim/enable
+
+Response renders the bearer_token in a masked input with copy button and visible eye icon to reveal.
+
+"I have securely stored this token" button closes modal. Once dismissed, the full token is never retrievable.
+
+⚠  The bearer_token is stored as SHA-256 hash in the control plane DB. The raw token is never stored. Token rotation is the only recovery path if the token is lost.
+
+
+
+5.1.3  Enabled State — SCIM Config Page
+
+After enabling, the page displays:
+
+Status badge: green "Active" pill
+
+SCIM Base URL: https://api.{domain}/scim/v2/{workspace_id} — copyable
+
+Token: {prefix}... — copyable prefix, "Rotate Token" button
+
+Schemas URL: copyable
+
+ServiceProviderConfig URL: copyable
+
+
+
+5.2  SCIM Configuration Settings
+
+Setting
+
+Default
+
+Description
+
+Deprovision Action
+
+Disable
+
+What happens when DELETE is called: Disable (disables KC user, preserves record) or Delete (hard deletes KC user). Warning shown for Delete.
+
+Sync Groups
+
+ON
+
+Whether group membership changes from IdP are applied to Keycloak groups.
+
+Allowed Operations
+
+All
+
+Multi-select: CREATE, UPDATE, DISABLE, DELETE. Restrict if IdP should only create, not delete.
+
+Custom Attribute Mapping
+
+None
+
+JSONB editor — map enterprise SCIM extension fields to Keycloak user attributes.
+
+
+
+5.3  IdP Setup Guides
+
+Route: /scim/setup-guide — Step-by-step integration instructions per IdP
+
+
+
+IdP
+
+Key Steps
+
+Okta
+
+Admin → Applications → [Your App] → Provisioning → Enable API integration → Enter Base URL and Bearer token → Test connection → Enable Create/Update/Deactivate operations
+
+Azure AD / Entra ID
+
+Enterprise Apps → Provisioning → Automatic → Tenant URL = Base URL → Secret Token = Bearer token → Test connection → Start provisioning
+
+Google Workspace
+
+Admin SDK provisioning → SCIM configuration → endpoint URL → authentication → attribute mapping → enable auto-provisioning
+
+OneLogin
+
+Administration → Provisioning → SCIM connector → Base URL + Bearer token → attribute mapping → enable lifecycle operations
+
+Generic SCIM 2.0
+
+SCIM 2.0 endpoint: {Base URL}/Users, {Base URL}/Groups. Auth: Bearer token. Filters supported: userName eq, externalId eq, emails.value eq.
+
+
+
+5.4  SCIM User Visibility
+
+Route: /scim/users — Lists SCIM-provisioned users with sync status
+
+Column
+
+Source
+
+Display
+
+Notes
+
+Username
+
+scim_users.username
+
+Text
+
+
+
+External ID
+
+scim_users.external_id
+
+Text (truncated)
+
+IdP-side user ID
+
+Status
+
+scim_users.active
+
+Active / Disabled pill
+
+
+
+Last Synced
+
+scim_users.last_synced_at
+
+Relative time
+
+e.g. "3 minutes ago"
+
+Source IdP
+
+Derived from scim config
+
+Badge
+
+Derived from SCIM config name
+
+
+
+6  Custom Federation / BYO IdP Onboarding
+
+Custom Federation enables enterprise customers to connect an existing corporate Identity Provider — any OIDC or SAML 2.0 compliant IdP, including Azure AD, Google Workspace, GitHub, or similar — so their employees authenticate using company credentials rather than Foundry IAM-native accounts.
+
+Route: /identity-providers — Workspace sidebar → Identity Providers
+
+ℹ  Keycloak handles the upstream federation protocol natively. Foundry IAM engineering work is the management API, the configuration portal, and the encrypted config storage layer.
+
+
+
+6.1  Provider Selection Screen
+
+Route: /identity-providers/new — Step 1 of 5
+
+Display provider tiles with logos — not a dropdown. Visual recognition dramatically reduces misconfiguration. Tile grid layout, 3 columns:
+
+
+
+Tile
+
+Protocol
+
+Auto-populated fields
+
+Okta
+
+OIDC Enterprise
+
+Token/Auth/UserInfo URLs derived from domain
+
+Azure AD / Entra ID
+
+SAML or OIDC
+
+URLs derived from Tenant ID
+
+Google Workspace
+
+OIDC (social)
+
+All URLs pre-populated
+
+GitHub
+
+OIDC (social)
+
+All URLs pre-populated
+
+Microsoft (personal)
+
+OIDC (social)
+
+All URLs pre-populated
+
+Generic OIDC
+
+OIDC Enterprise
+
+No pre-population — all fields manual
+
+Generic SAML
+
+SAML 2.0
+
+XML metadata upload or full manual config
+
+
+
+6.2  Step-by-Step Configuration Flow
+
+
+
+Step 1  Select Provider
+
+User clicks provider tile. System records type. Navigate to Step 2.
+
+Step 2  Enter Configuration
+
+Form fields vary by provider. See Section 6.3 for per-provider field sets. Known providers auto-populate stable URLs. User enters only: domain/tenant ID, client ID, client secret (OIDC) or certificate (SAML).
+
+Step 3 — CRITICAL  Register Callback URL in Upstream IdP
+
+Before saving, display the Foundry IAM callback URL that must be registered in the upstream IdP application settings. This step frequently causes failed integrations if skipped.
+
+Display:
+
+Callback URL: https://id.{domain}/realms/tnt_{id}/broker/{alias}/endpoint
+
+Copy button — prominent
+
+Checkbox: "I have registered this URL in my upstream IdP." Must be checked.
+
+Provider-specific instruction rendered per IdP type (e.g. for OIDC providers: "Add this URL under the allowed redirect URIs in your IdP application settings." For SAML providers: "Register this URL as the Assertion Consumer Service URL in your IdP.")
+
+Step 4  Configure Attribute Mappers
+
+Default mappers shown for the provider type (email, firstName, lastName). User can add custom claim mappings. Table: Upstream Claim (left) → Foundry IAM User Attribute (right) + Sync Mode dropdown.
+
+Step 5  Save & Test
+
+"Save and Test Connection" button calls POST /v1/workspaces/:id/identity-providers. On success, a "Test Authentication" button appears. Click opens the test URL in a new browser tab, initiating a real auth flow against the upstream IdP.
+
+
+
+6.3  Per-Provider Field Specifications
+
+
+6.3.1  OIDC Enterprise Provider (e.g. domain-based, Okta-compatible)
+
+Field
+
+Required
+
+Notes
+
+Display Name
+
+Yes
+
+Shown on login button. Default: "Sign in with {OrgName}"
+
+Okta Domain
+
+Yes
+
+e.g. auth.acmecorp.com — all OIDC endpoint URLs are auto-derived from the domain
+
+Client ID
+
+Yes
+
+Obtain from the upstream IdP's app integration settings
+
+Client Secret
+
+Yes
+
+Obtain from the upstream IdP's app integration settings — stored AES-256-GCM encrypted
+
+Email Domain Routing
+
+No
+
+e.g. acme.com — auto-redirect on email match
+
+
+
+6.3.2  Azure AD / Entra ID (SAML)
+
+Field
+
+Required
+
+Notes
+
+Display Name
+
+Yes
+
+Login button label
+
+Azure Tenant ID
+
+Yes
+
+SAML SSO and SLO URLs auto-derived from tenant ID
+
+Signing Certificate
+
+Yes
+
+PEM format — download from Azure AD SAML settings
+
+NameID Format
+
+Yes
+
+Default: emailAddress. Match what Azure AD sends.
+
+Upload IdP Metadata XML
+
+Alt
+
+Upload Azure metadata XML to auto-populate all fields
+
+
+
+6.3.3  Google Workspace (OIDC Social)
+
+Field
+
+Required
+
+Notes
+
+Client ID
+
+Yes
+
+Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs
+
+Client Secret
+
+Yes
+
+From same Google Cloud Console entry
+
+Hosted Domain
+
+No
+
+Restrict login to @yourdomain.com users only. Prevents external Gmail accounts.
+
+
+
+6.3.4  Generic OIDC
+
+Field
+
+Required
+
+Notes
+
+Authorization URL
+
+Yes
+
+Hint: find at /.well-known/openid-configuration
+
+Token URL
+
+Yes
+
+
+
+UserInfo URL
+
+No
+
+Required if groups/profile claims needed
+
+JWKS URL
+
+Yes
+
+For token signature verification
+
+Issuer
+
+Yes
+
+Must match iss claim in upstream tokens
+
+Client ID
+
+Yes
+
+
+
+Client Secret
+
+Yes
+
+Stored AES-256-GCM encrypted
+
+Scopes
+
+Yes
+
+Default: openid profile email. Add groups if needed.
+
+PKCE
+
+No
+
+Toggle — enable if upstream supports S256
+
+
+
+6.3.5  Generic SAML
+
+Field
+
+Required
+
+Notes
+
+Upload IdP Metadata XML
+
+Alt
+
+Auto-populates all fields below if valid XML
+
+Single Sign-On Service URL
+
+Yes
+
+HTTP-Redirect or HTTP-POST binding URL
+
+Single Logout URL
+
+No
+
+Leave empty if upstream does not support SLO
+
+IdP Entity ID
+
+Yes
+
+The entityID from upstream metadata
+
+Signing Certificate
+
+Yes
+
+PEM format — validates assertion signatures
+
+NameID Format
+
+Yes
+
+Match what the upstream IdP sends
+
+Want Assertions Signed
+
+Yes
+
+Toggle — ON by default
+
+Validate Signature
+
+Yes
+
+Toggle — ON by default. Never disable in production.
+
+
+
+6.4  Identity Provider Detail Page
+
+Route: /identity-providers/:id
+
+
+
+Header: Provider logo + display name + alias + enabled/disabled status badge. Enable/Disable toggle.
+
+Callback URLs section: OIDC redirect URI or SAML ACS URL. Copy button. Provider-specific instruction text.
+
+Test Authentication: Button opens test URL in new tab. Displays last test result with timestamp.
+
+Domain Routing: List of email domains. Add/remove. Users with matching domain auto-routed to this IdP.
+
+Attribute Mappers table: Upstream claim → Foundry IAM user attribute. Sync mode column. Add/edit/delete rows.
+
+Configuration (read-only): Non-sensitive fields displayed. Secrets shown as "••••••••" with Update button.
+
+Danger Zone: Delete IdP — requires typing alias to confirm. Warning: federated users lose SSO and may be unable to log in.
+
+
+
+7  Cross-Protocol Field Validation Rules
+
+These validation rules apply across all onboarding flows. They must be implemented consistently in both client-side (immediate feedback) and server-side (authoritative) validation.
+
+
+
+7.1  URL Fields
+
+Rule
+
+Applies To
+
+Error Message
+
+Must be valid URL format
+
+All URL fields
+
+Enter a valid URL including the protocol (https://)
+
+HTTPS required (production)
+
+Redirect URIs, ACS URLs, SLO URLs
+
+Redirect URIs must use HTTPS in production. HTTP is only allowed for localhost.
+
+No trailing wildcards on ACS
+
+SAML ACS URL
+
+Assertion Consumer Service URL must be an exact URL, not a wildcard pattern.
+
+localhost allowed (HTTP)
+
+Redirect URIs only
+
+Exception for development — http://localhost:* is permitted.
+
+
+
+7.2  Certificate Fields
+
+Rule
+
+Details
+
+PEM format required
+
+Must begin with -----BEGIN CERTIFICATE----- and end with -----END CERTIFICATE-----. Strip whitespace before validation.
+
+Not expired
+
+Parse certificate and check notAfter. Warn if expiry < 30 days. Reject if already expired.
+
+RSA key minimum
+
+RSA-2048 minimum. Warn (do not reject) if RSA-1024 detected.
+
+
+
+7.3  Attribute Mapper Validation
+
+Upstream claim: required, max 512 chars, no spaces
+
+User attribute: required, must be a known Keycloak standard attribute (email, firstName, lastName, username) or attributes.* namespace
+
+Duplicate upstream claim: warn if same upstream claim mapped twice — may indicate misconfiguration
+
+
+
+7.4  Plan Gating Rules
+
+Feature
+
+Starter
+
+Growth
+
+Enterprise
+
+OIDC App creation
+
+✓ (max 3 apps)
+
+✓ (max 10 apps)
+
+✓ Unlimited
+
+SAML SP registration
+
+✗ Upgrade
+
+✓ (max 5 SPs)
+
+✓ Unlimited
+
+SCIM Provisioning
+
+✗ Upgrade
+
+✓ (1 endpoint)
+
+✓ Unlimited
+
+Custom Federation / BYO IdP
+
+✗ Upgrade
+
+✓ (max 2 IdPs)
+
+✓ Unlimited
+
+LDAP Federation
+
+✗ Not available
+
+✗ Not available
+
+✓ Gated — contact sales
+
+
+
+8  Error Handling & Edge Cases
+
+8.1  Global Onboarding Error States
+
+Code
+
+Context
+
+Error
+
+Recovery
+
+401
+
+Any authenticated screen
+
+Session expired
+
+Redirect to /login with return_to parameter
+
+402
+
+SAML/SCIM/Federation
+
+Plan upgrade required
+
+Show upgrade modal linking to /billing
+
+409
+
+App creation
+
+Duplicate app name in workspace
+
+Prompt user to choose a different name
+
+409
+
+SAML SP registration
+
+Entity ID already registered
+
+Show existing SP link; offer to update
+
+422
+
+SCIM enable
+
+Workspace SCIM already active
+
+Show current SCIM config; offer token rotation
+
+503
+
+Keycloak provisioning
+
+Realm creation failed
+
+Retry button + support link. Log to audit_logs.
+
+
+
+8.2  Keycloak Provisioning Failure Recovery
+
+If realm creation fails during sign-up (tenant status stays pending, workspace status = error):
+
+User sees a friendly error page: "We could not finish setting up your account. Try again or contact support."
+
+Retry button calls POST /v1/auth/signup/retry with the original tenant ULID
+
+Control plane checks: if tenant exists but workspace status=error, re-attempt realm provisioning (idempotent via Keycloak Admin API)
+
+If second attempt fails: set status=failed, create support ticket in audit_logs with full error context
+
+
+
+8.3  SCIM Token Loss Recovery
+
+If a tenant admin loses their SCIM bearer token (cannot be retrieved — stored only as hash):
+
+Navigate to /scim
+
+"Rotate Token" button — shows same once-shown token flow as initial enable
+
+Old token is immediately invalidated on rotation — any IdP using the old token will begin receiving 401 errors
+
+⚠  Document this clearly on the SCIM page: "Lost your token? Use Rotate Token. Your IdP will need to be reconfigured with the new token."
+
+
+
+8.4  Federated User Account Linking Conflict
+
+If a user authenticates via a federated IdP but already has a local account with the same email address:
+
+Keycloak triggers the "first broker login" flow
+
+Default behaviour: prompt user to link accounts by entering their Foundry IAM password
+
+On link: federated identity added to existing local account — user is not duplicated
+
+If user cannot remember local password: standard password reset flow, then re-attempt federation
+
+✕  The first_login_flow on identity_providers defaults to "first broker login". Do not change this to automatic linking without explicit customer consent — it is a security risk.
+
+
+
+9  Onboarding Portal Navigation Map
+
+Complete route map for all onboarding surfaces across protocols.
+
+
+
+Route
+
+Protocol
+
+Purpose
+
+/signup
+
+All
+
+Account creation — shared entry point
+
+/verify-email
+
+All
+
+Email verification holding screen
+
+/onboarding/survey
+
+All
+
+4-screen intent survey
+
+/getting-started
+
+All
+
+Dashboard checklist — post-survey landing
+
+/apps/new
+
+OIDC
+
+New OIDC app registration wizard
+
+/apps/:id
+
+OIDC
+
+OIDC integration page — credentials + quickstarts
+
+/saml
+
+SAML
+
+List all SAML Service Providers
+
+/saml/new
+
+SAML
+
+Register SAML SP — XML upload or manual
+
+/saml/:id
+
+SAML
+
+SP detail — IdP metadata download, mappings
+
+/saml/:id/test
+
+SAML
+
+IdP-initiated SSO test + assertion inspector
+
+/scim
+
+SCIM
+
+SCIM enable/disable, token, settings
+
+/scim/users
+
+SCIM
+
+SCIM-provisioned user list with sync status
+
+/scim/logs
+
+SCIM
+
+SCIM operation log — last 100 entries
+
+/scim/setup-guide
+
+SCIM
+
+Per-IdP SCIM setup instructions
+
+/identity-providers
+
+Federation
+
+List configured IdPs, enable/disable
+
+/identity-providers/new
+
+Federation
+
+Add IdP — provider tile selection + config wizard
+
+/identity-providers/:id
+
+Federation
+
+IdP detail — config, mappers, test, domain routing
+
+
+
+9.1  Onboarding Completion Definition
+
+An onboarding session is considered "complete" when the tenant has achieved at least one of the following milestones. These are tracked in tenant.metadata.onboarding_complete_at.
+
+OIDC: First app created AND at least one user other than the owner exists in the workspace
+
+SAML: First SAML SP registered AND IdP metadata successfully downloaded or copied
+
+SCIM: SCIM enabled, token copied, AND at least one user provisioned via SCIM
+
+Federation: First IdP registered AND test authentication completed successfully
+
+
+
+Foundry IAM — Onboarding Flow Specification v1.0
+
+Prepared by: Tawanda Masaiti  ·  tmasaiti@gmail.com  ·  0772209275
