@@ -27,7 +27,7 @@ const INITIAL_CHECKLIST: ChecklistItem[] = [
       "Create your first OIDC application and get a Client ID and Issuer URL. A developer can have working auth in under 30 minutes.",
     completionHint: "Completed when your first app is created in a workspace.",
     ctaLabel: "Add App",
-    ctaHref: "/apps/new",
+    ctaHref: "/apps",
     done: false,
   },
   {

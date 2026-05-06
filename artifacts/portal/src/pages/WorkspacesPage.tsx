@@ -89,7 +89,7 @@ export default function WorkspacesPage() {
               <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">IAM Realm</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5">
                 {[
-                  { label: "Realm", value: ws.keycloak.realm },
+                  { label: "Domain", value: ws.keycloak.realm },
                   { label: "Issuer", value: ws.keycloak.issuer },
                   { label: "JWKS URI", value: ws.keycloak.jwks_uri },
                   { label: "Well-Known", value: ws.keycloak.well_known },
@@ -140,7 +140,7 @@ export default function WorkspacesPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Realm mode</label>
                 <select className="w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                  <option value="isolated-realm">Isolated realm — dedicated Keycloak realm</option>
+                  <option value="isolated-realm">Isolated — dedicated identity domain</option>
                   <option value="shared-realm">Shared realm — shared with tenant realm</option>
                 </select>
                 <p className="text-xs text-muted-foreground mt-1.5">Isolated realm provides stronger tenant isolation. Cannot be changed after creation.</p>

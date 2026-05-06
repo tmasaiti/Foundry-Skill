@@ -9,9 +9,13 @@ import { MOCK_APPS, MOCK_WORKSPACES, MOCK_AUDIT_LOGS } from "@/lib/mockData";
 import { AlertTriangle, RefreshCw, ExternalLink, Info, Clock, User, Activity } from "lucide-react";
 
 const SNIPPET_LANGS = [
-  { id: "nodejs", label: "Node.js" },
-  { id: "python", label: "Python" },
-  { id: "go", label: "Go" },
+  { id: "nodejs",  label: "Node.js" },
+  { id: "python",  label: "Python"  },
+  { id: "go",      label: "Go"      },
+  { id: "java",    label: "Java"    },
+  { id: "swift",   label: "Swift"   },
+  { id: "csharp",  label: "C#"      },
+  { id: "php",     label: "PHP"     },
 ];
 
 function getSnippets(app: typeof MOCK_APPS[0]) {
@@ -80,6 +84,168 @@ func AuthMiddleware(next http.Handler) http.Handler {
     next.ServeHTTP(w, r.WithContext(ctx))
   })
 }`,
+    java: `import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
+import jakarta.servlet.*;
+import jakarta.servlet.http.*;
+import java.io.IOException;
+
+public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private static final String JWKS_URI = "${app.oidc.jwks_uri}";
+    private static final String ISSUER   = "${app.oidc.issuer}";
+    private static final String AUDIENCE = "${app.oidc.client_id}";
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req,
+                                    HttpServletResponse res,
+                                    FilterChain chain)
+            throws ServletException, IOException {
+
+        String header = req.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) {
+            res.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+        try {
+            Claims claims = Jwts.parserBuilder()
+                .setSigningKeyResolver(new JwksSigningKeyResolver(JWKS_URI))
+                .requireIssuer(ISSUER)
+                .requireAudience(AUDIENCE)
+                .build()
+                .parseClaimsJws(header.substring(7))
+                .getBody();
+
+            req.setAttribute("userId", claims.getSubject());
+            chain.doFilter(req, res);
+        } catch (JwtException e) {
+            res.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+        }
+    }
+}`,
+    swift: `import Foundation
+
+struct JWTValidator {
+    static let jwksURI  = "${app.oidc.jwks_uri}"
+    static let issuer   = "${app.oidc.issuer}"
+    static let audience = "${app.oidc.client_id}"
+
+    /// Fetches JWKS and validates the token's claims.
+    /// Use JWTDecode.swift or AppAuth for production signature verification.
+    static func validate(token: String,
+                         completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard let url = URL(string: jwksURI) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, _, error in
+            if let error = error { completion(.failure(error)); return }
+            guard let data = data else { return }
+
+            let parts = token.components(separatedBy: ".")
+            guard parts.count == 3,
+                  let padded = parts[1].base64Padded,
+                  let payloadData = Data(base64Encoded: padded),
+                  let payload = try? JSONSerialization.jsonObject(
+                      with: payloadData) as? [String: Any]
+            else { completion(.failure(URLError(.badServerResponse))); return }
+
+            let iss = payload["iss"] as? String
+            let aud = payload["aud"] as? String
+            let exp = payload["exp"] as? TimeInterval ?? 0
+
+            guard iss == issuer,
+                  aud == audience,
+                  exp > Date().timeIntervalSince1970
+            else { completion(.failure(URLError(.userAuthenticationRequired))); return }
+
+            completion(.success(payload)) // payload["sub"] → user ID
+        }.resume()
+    }
+}
+
+private extension String {
+    var base64Padded: String? {
+        let r = count % 4
+        return r == 0 ? self : self + String(repeating: "=", count: 4 - r)
+    }
+}`,
+    csharp: `using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // OIDC discovery is used to fetch signing keys automatically
+        options.Authority       = "${app.oidc.issuer}";
+        options.MetadataAddress = "${app.oidc.issuer}/.well-known/openid-configuration";
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer           = true,
+            ValidIssuer              = "${app.oidc.issuer}",
+            ValidateAudience         = true,
+            ValidAudience            = "${app.oidc.client_id}",
+            ValidateLifetime         = true,
+            ValidAlgorithms          = new[] { SecurityAlgorithms.RsaSha256 },
+            RequireSignedTokens      = true,
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// In your controller:
+// [Authorize]
+// public IActionResult Protected() {
+//     var userId = User.FindFirst("sub")?.Value;
+//     return Ok(userId);
+// }`,
+    php: `<?php
+// Requires: composer require firebase/php-jwt
+
+require 'vendor/autoload.php';
+
+use Firebase\\JWT\\JWT;
+use Firebase\\JWT\\JWK;
+
+const JWKS_URI = '${app.oidc.jwks_uri}';
+const ISSUER   = '${app.oidc.issuer}';
+const AUDIENCE = '${app.oidc.client_id}';
+
+function validateBearerToken(): object {
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if (!str_starts_with($header, 'Bearer ')) {
+        http_response_code(401);
+        exit(json_encode(['error' => 'Missing bearer token']));
+    }
+
+    $token = substr($header, 7);
+    $jwks  = json_decode(file_get_contents(JWKS_URI), true);
+    $keys  = JWK::parseKeySet($jwks);
+
+    try {
+        $decoded = JWT::decode($token, $keys);
+    } catch (\\Exception $e) {
+        http_response_code(401);
+        exit(json_encode(['error' => 'Invalid token']));
+    }
+
+    if ($decoded->iss !== ISSUER || $decoded->aud !== AUDIENCE) {
+        http_response_code(401);
+        exit(json_encode(['error' => 'Token audience or issuer mismatch']));
+    }
+
+    return $decoded; // $decoded->sub → user ID
+}
+
+// Usage:
+$user = validateBearerToken();
+echo "Hello, " . $user->sub;`,
   };
 }
 

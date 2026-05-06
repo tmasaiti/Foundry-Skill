@@ -74,7 +74,7 @@ export default function SCIMConfig() {
           <p className="text-sm font-medium text-foreground">SCIM 2.0 Automated Provisioning</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Connect Okta, Azure AD, or any SCIM 2.0 IdP to automatically sync users and groups into Foundry IAM.
-            New hires appear in Keycloak before day one; terminated users are disabled within minutes of offboarding.
+            New hires appear in Foundry IAM before day one; terminated users are disabled within minutes of offboarding.
             Enterprise compliance (SOC 2, ISO 27001) requires this — manual invites fail audits at scale.
           </p>
         </div>
@@ -214,14 +214,14 @@ export default function SCIMConfig() {
                     <input type="radio" name="deprov" value="disable" checked={deprovision === "disable"} onChange={() => setDeprovision("disable")} className="mt-0.5 accent-primary" />
                     <div>
                       <p className="text-sm font-medium text-foreground">Disable (recommended)</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">User is disabled in Keycloak — cannot log in, but account and audit history are preserved. Reversible.</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">User is disabled in Foundry IAM — cannot log in, but account and audit history are preserved. Reversible.</p>
                     </div>
                   </label>
                   <label className={cn("flex-1 flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors", deprovision === "delete" ? "border-red-300 bg-red-50/50" : "border-border hover:border-foreground/20")}>
                     <input type="radio" name="deprov" value="delete" checked={deprovision === "delete"} onChange={() => setDeprovision("delete")} className="mt-0.5 accent-red-600" />
                     <div>
                       <p className="text-sm font-medium text-foreground">Delete (irreversible)</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">User is hard-deleted from Keycloak. Audit history in Foundry IAM is retained, but the user cannot be restored.</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">User is hard-deleted from Foundry IAM. Audit history is retained, but the user cannot be restored.</p>
                     </div>
                   </label>
                 </div>
@@ -242,7 +242,7 @@ export default function SCIMConfig() {
               <div className="flex items-center justify-between py-3 border-t border-border">
                 <div>
                   <p className="text-sm font-medium text-foreground">Sync group membership</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">When enabled, group membership changes in your IdP are reflected in Keycloak automatically.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">When enabled, group membership changes in your IdP are reflected in Foundry IAM automatically.</p>
                 </div>
                 <button
                   onClick={() => setSyncGroups((v) => !v)}
@@ -354,7 +354,7 @@ export default function SCIMConfig() {
             <h3 className="text-base font-semibold text-foreground mb-1">Enable SCIM Provisioning</h3>
             <p className="text-sm text-muted-foreground mb-4">
               A Bearer token will be generated for <strong>{cfg.workspace_name}</strong>.
-              This token grants the ability to create, update, and disable users in your Keycloak realm.
+              This token grants the ability to create, update, and disable users in your workspace.
             </p>
 
             {!tokenRevealed ? (
@@ -480,7 +480,7 @@ export default function SCIMConfig() {
             </p>
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 mb-4">
               <p className="text-xs text-red-800">
-                <strong>Users already provisioned are not removed.</strong> They remain active in Keycloak — but future hires, updates, and terminations will no longer sync automatically. You will need to manage users manually until SCIM is re-enabled.
+                <strong>Users already provisioned are not removed.</strong> They remain active in Foundry IAM — but future hires, updates, and terminations will no longer sync automatically. You will need to manage users manually until SCIM is re-enabled.
               </p>
             </div>
             <div className="flex gap-3">

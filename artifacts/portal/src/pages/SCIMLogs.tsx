@@ -107,7 +107,7 @@ export default function SCIMLogs() {
             </p>
             <p className="text-xs text-red-700 mt-0.5">
               Failed operations are shown first below. Each error includes the HTTP status code and a description — resolve these before they accumulate.
-              Persistent 409 errors typically indicate duplicate provisioning; 503 errors indicate Keycloak connectivity issues.
+              Persistent 409 errors typically indicate duplicate provisioning; 503 errors indicate identity provider connectivity issues.
             </p>
           </div>
           <button

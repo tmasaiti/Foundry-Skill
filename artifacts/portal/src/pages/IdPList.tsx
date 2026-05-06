@@ -60,7 +60,7 @@ export default function IdPList() {
           <p className="text-sm font-medium text-foreground">Custom Federation — Bring Your Own IdP</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Connect your existing corporate IdP (Okta, Azure AD, Google) so employees log in with company credentials.
-            Keycloak brokers the identity — your applications always receive Foundry IAM tokens, never upstream IdP tokens.
+            Foundry IAM brokers the identity — your applications always receive Foundry IAM tokens, never upstream IdP tokens.
             Disable an IdP to remove its login button immediately; existing sessions remain valid until expiry.
           </p>
         </div>

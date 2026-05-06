@@ -42,7 +42,7 @@ export default function Login() {
             Enterprise identity,<br />in 30 minutes.
           </h1>
           <p className="text-slate-400 text-base leading-relaxed mb-8">
-            Add Keycloak-powered OIDC auth to any application without running your own cluster.
+            Add enterprise OIDC auth to any application without running your own infrastructure.
           </p>
           <div className="space-y-3">
             {["Multi-tenant realm isolation", "PKCE & confidential client support", "Audit logs & compliance ready", "Usage-based billing with no surprises"].map((f) => (

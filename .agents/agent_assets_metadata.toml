@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "dbVoEPh8FKfGsjgRwHnzn"
+uri = "file://Developer_Checkpoint.md"
+type = "text"
+title = "Developer_Checkpoint.md"

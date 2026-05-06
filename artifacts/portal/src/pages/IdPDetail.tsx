@@ -490,7 +490,7 @@ export default function IdPDetail() {
               <div>
                 <p className="text-sm font-medium text-foreground mb-1">Delete Identity Provider</p>
                 <p className="text-xs text-muted-foreground">
-                  Removes this IdP from the Keycloak realm immediately. The login button disappears from the realm login page.
+                  Removes this IdP from your workspace immediately. The login option disappears from the sign-in page.
                   Federated users retain their user record but their SSO link is broken — they will not be able to log in
                   via this provider. This action cannot be undone.
                 </p>

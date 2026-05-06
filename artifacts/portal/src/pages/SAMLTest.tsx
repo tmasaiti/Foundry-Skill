@@ -311,7 +311,7 @@ export default function SAMLTest() {
                 {[
                   { name: "SAML Tracer", desc: "Firefox/Chrome extension — captures real SAML flows in the browser" },
                   { name: "samltool.io", desc: "Paste a base64 assertion to decode and validate signature" },
-                  { name: "Keycloak Admin Console", desc: "Client Scopes → Evaluate — generate assertion for any user" },
+                  { name: "Foundry IAM Admin Console", desc: "Client Scopes → Evaluate — generate assertion for any user" },
                 ].map(({ name, desc }) => (
                   <li key={name} className="flex gap-2 text-xs">
                     <span className="font-medium text-foreground shrink-0">{name}</span>

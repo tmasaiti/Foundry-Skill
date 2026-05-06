@@ -2,12 +2,17 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
-import { MOCK_APPS, MOCK_WORKSPACES } from "@/lib/mockData";
+import { MOCK_APPS, MOCK_WORKSPACES, MOCK_TENANT } from "@/lib/mockData";
 import {
   Boxes, Plus, Search, AlertTriangle, ArrowUpRight, Activity, X,
-  Zap, Shield, Globe, Cpu, ChevronRight,
+  Zap, Shield, Globe, Cpu, ChevronRight, Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const PLAN_RANK: Record<string, number> = { starter: 0, growth: 1, enterprise: 2 };
+const METHOD_MIN_PLAN: Partial<Record<IntegrationMethod, string>> = {
+  saml: "growth",
+};
 
 const STATUS_SORT: Record<string, number> = { error: 0, provisioning: 1, active: 2 };
 
@@ -79,8 +84,15 @@ function NewAppModal({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<IntegrationMethod>("oidc");
 
   const method = METHODS.find((m) => m.id === selected)!;
+  const currentPlanRank = PLAN_RANK[MOCK_TENANT.plan] ?? 0;
+  const minPlan = METHOD_MIN_PLAN[selected];
+  const isBlocked = minPlan !== undefined && currentPlanRank < (PLAN_RANK[minPlan] ?? 0);
+  const minPlanLabel = minPlan
+    ? minPlan.charAt(0).toUpperCase() + minPlan.slice(1)
+    : null;
 
   function handleContinue() {
+    if (isBlocked) return;
     onClose();
     navigate(method.href);
   }
@@ -107,6 +119,13 @@ function NewAppModal({ onClose }: { onClose: () => void }) {
           {METHODS.map((m) => {
             const Icon = m.icon;
             const active = selected === m.id;
+            const methodMinPlan = METHOD_MIN_PLAN[m.id];
+            const methodBlocked =
+              methodMinPlan !== undefined &&
+              (PLAN_RANK[MOCK_TENANT.plan] ?? 0) < (PLAN_RANK[methodMinPlan] ?? 0);
+            const methodMinLabel = methodMinPlan
+              ? methodMinPlan.charAt(0).toUpperCase() + methodMinPlan.slice(1) + "+"
+              : null;
             return (
               <button
                 key={m.id}
@@ -122,12 +141,17 @@ function NewAppModal({ onClose }: { onClose: () => void }) {
                   <Icon className={cn("h-4.5 w-4.5", m.iconColor)} style={{ height: "1.125rem", width: "1.125rem" }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-foreground">{m.label}</span>
                     <span className="text-xs text-muted-foreground">— {m.sublabel}</span>
                     {m.isDefault && (
                       <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold">
                         Recommended
+                      </span>
+                    )}
+                    {methodBlocked && methodMinLabel && (
+                      <span className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        <Lock className="h-2.5 w-2.5" /> Requires {methodMinLabel}
                       </span>
                     )}
                   </div>
@@ -146,6 +170,30 @@ function NewAppModal({ onClose }: { onClose: () => void }) {
           })}
         </div>
 
+        {/* Plan upgrade callout — shown when a gated method is selected on a lower plan */}
+        {isBlocked && minPlanLabel && (
+          <div className="mx-6 mb-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 flex items-start gap-3">
+            <Lock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">
+                {method.label} requires the {minPlanLabel} plan
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Your current plan is{" "}
+                <span className="font-semibold capitalize">{MOCK_TENANT.plan}</span>. Upgrade to
+                unlock SAML SP registration, SCIM provisioning, and enterprise federation.
+              </p>
+              <a
+                href="/billing"
+                onClick={onClose}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-900"
+              >
+                View plans on Billing <ChevronRight className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-muted/30">
           <button
@@ -156,7 +204,9 @@ function NewAppModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             onClick={handleContinue}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+            disabled={isBlocked}
+            title={isBlocked ? `Requires ${minPlanLabel} plan` : undefined}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >
             Next <ChevronRight className="h-4 w-4" />
           </button>

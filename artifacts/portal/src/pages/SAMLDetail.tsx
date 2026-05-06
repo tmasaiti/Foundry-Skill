@@ -157,7 +157,7 @@ export default function SAMLDetail() {
             {sp.name} has been removed
           </p>
           <p className="text-sm text-muted-foreground">
-            The SAML client has been deleted from your Keycloak realm. SSO via this SP will no longer
+            The service provider has been removed from your workspace. SSO via this SP will no longer
             work.
           </p>
           <Link href="/saml">
@@ -448,7 +448,7 @@ export default function SAMLDetail() {
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
-                  Keycloak attribute
+                  User attribute
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
                   → SAML attribute name
@@ -684,7 +684,7 @@ export default function SAMLDetail() {
           <div>
             <p className="text-sm font-medium text-foreground">Delete this service provider</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Permanently removes the SAML client from Keycloak. Users attempting SSO via{" "}
+              Permanently removes the service provider from your workspace. Users attempting SSO via{" "}
               {sp.name} will receive an error immediately. This cannot be undone.
             </p>
           </div>
@@ -787,7 +787,7 @@ export default function SAMLDetail() {
               <div>
                 <h3 className="font-semibold text-foreground">Delete {sp.name}?</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  This permanently removes the SAML client from Keycloak. All SSO flows using this SP
+                  This permanently removes the service provider from your workspace. All SSO flows using this SP
                   will break immediately.
                 </p>
               </div>

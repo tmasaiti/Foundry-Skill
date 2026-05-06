@@ -208,8 +208,8 @@ export default function SCIMUsers() {
           <p className="text-xs font-medium text-muted-foreground mb-2">User Lineage</p>
           <p className="text-xs text-muted-foreground">
             Each SCIM-provisioned user is linked to their IdP external ID (e.g. <code className="font-mono">okta-user-00Abc123</code>).
-            This ID is stored in Keycloak as <code className="font-mono">attributes.scim_external_id</code> and is used to match the user across future SCIM updates.
-            The SCIM record ID shown to the IdP maps via the <code className="font-mono">scim_users</code> table — never from Keycloak directly.
+            This ID is stored in Foundry IAM as <code className="font-mono">attributes.scim_external_id</code> and is used to match the user across future SCIM updates.
+            The SCIM record ID shown to the IdP maps via the <code className="font-mono">scim_users</code> table — never from the underlying store directly.
           </p>
         </div>
       )}

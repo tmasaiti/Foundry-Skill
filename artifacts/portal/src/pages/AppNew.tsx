@@ -6,6 +6,8 @@ import {
   Check, ChevronRight, Plus, Trash2, Info, AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AppNewSWA from "@/pages/AppNewSWA";
+import AppNewAPI from "@/pages/AppNewAPI";
 
 type AppType = "public" | "confidential";
 type PkceMode = "required" | "optional";
@@ -17,7 +19,7 @@ const SCOPES_OPTIONAL = ["offline_access", "roles", "groups", "address", "phone"
 
 function StepIndicator({ step }: { step: number }) {
   return (
-    <div className="flex items-center gap-0 mb-8">
+    <div className="flex items-center justify-center gap-0 mb-8">
       {STEPS.map((label, i) => {
         const n = i + 1;
         const done = step > n;
@@ -82,6 +84,14 @@ const INPUT_CLS =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
 
 export default function AppNew() {
+  const type = new URLSearchParams(window.location.search).get("type");
+  if (type === "swa") return <AppNewSWA />;
+  if (type === "api") return <AppNewAPI />;
+
+  return <OIDCWizard />;
+}
+
+function OIDCWizard() {
   const [, navigate] = useLocation();
   const [step, setStep] = useState(1);
 
@@ -219,11 +229,11 @@ export default function AppNew() {
 
       {/* ── Step 1: Name & Type ── */}
       {step === 1 && (
-        <div className="max-w-2xl space-y-5">
+        <div className="max-w-2xl mx-auto space-y-5">
           <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 flex items-start gap-3">
             <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
             <p className="text-sm text-blue-800">
-              Creating an OIDC app provisions a Keycloak client in your selected workspace realm.
+              Creating an OIDC app registers a client in your selected workspace.
               You'll receive a <strong>Client ID</strong> and <strong>Issuer URL</strong> immediately on creation.
             </p>
           </div>
@@ -246,7 +256,7 @@ export default function AppNew() {
             <Field
               label="Workspace"
               required
-              hint="The Keycloak realm this client will be created in. Production and Staging realms are isolated."
+              hint="The workspace this client will be registered in. Production and Staging workspaces are isolated."
             >
               <select
                 value={workspaceId}
@@ -355,7 +365,7 @@ export default function AppNew() {
               <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 flex items-start gap-2">
                 <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground">
-                  Public apps use PKCE (RFC 7636) and do not receive a client secret. Keycloak enforces
+                  Public apps use PKCE (RFC 7636) and do not receive a client secret. The platform enforces
                   a code_challenge on every authorization request. This is the security default for SPAs and mobile.
                 </p>
               </div>
@@ -376,11 +386,11 @@ export default function AppNew() {
 
       {/* ── Step 2: Redirect URIs ── */}
       {step === 2 && (
-        <div className="max-w-2xl space-y-5">
+        <div className="max-w-2xl mx-auto space-y-5">
           <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 flex items-start gap-3">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-sm text-amber-800">
-              Keycloak will only redirect to URIs listed here. Unregistered URIs cause an{" "}
+              Only registered redirect URIs are accepted. Unregistered URIs cause an{" "}
               <code className="font-mono text-xs">invalid_redirect_uri</code> error. HTTP localhost URIs are allowed in development; HTTPS is required in production.
             </p>
           </div>
@@ -392,7 +402,7 @@ export default function AppNew() {
               setRedirectUris,
               true,
               "https://app.example.com/auth/callback",
-              "The URL Keycloak sends the authorization code to after login. Add one per line for multiple environments."
+              "The URL Foundry IAM sends the authorization code to after login. Add one per line for multiple environments."
             )}
             {uriListField(
               "Post-logout redirect URIs",
@@ -400,7 +410,7 @@ export default function AppNew() {
               setPostLogoutUris,
               false,
               "https://app.example.com/logged-out",
-              "Where Keycloak redirects after the user signs out. Optional but strongly recommended."
+              "Where Foundry IAM redirects after the user signs out. Optional but strongly recommended."
             )}
             {uriListField(
               "Web origins",
@@ -432,7 +442,7 @@ export default function AppNew() {
 
       {/* ── Step 3: Token Lifetimes ── */}
       {step === 3 && (
-        <div className="max-w-2xl space-y-5">
+        <div className="max-w-2xl mx-auto space-y-5">
           <div className="rounded-xl border border-border bg-card p-5 space-y-6">
             {/* Access token */}
             <div>
@@ -550,13 +560,13 @@ export default function AppNew() {
 
       {/* ── Step 4: Review & Create ── */}
       {step === 4 && (
-        <div className="max-w-2xl space-y-5">
+        <div className="max-w-2xl mx-auto space-y-5">
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             {/* Header */}
             <div className="px-5 py-4 border-b border-border bg-muted/30">
               <p className="text-sm font-semibold text-foreground">Review your application</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                A Keycloak client will be created when you click Create App. You can edit all settings afterwards.
+                An app client will be registered when you click Create App. You can edit all settings afterwards.
               </p>
             </div>
 

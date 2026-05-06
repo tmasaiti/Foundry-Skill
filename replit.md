@@ -136,7 +136,9 @@ Tables created/pushed via `pnpm --filter @workspace/db run push`:
 - `/login` — Split-panel brand login page
 - `/` — Dashboard with MAU trend, workspace/app overview, recent activity
 - `/apps` — Filterable app list with PKCE/type badges; "New App" opens integration-type selection modal (OIDC [default], SAML 2.0, SWA, API Services) then routes to correct wizard
-- `/apps/new` — 4-step OIDC app creation wizard: (1) Name/Type (public/confidential, PKCE, workspace), (2) Redirect URIs (+ post-logout + web origins), (3) Token Lifetimes (sliders, scope selector), (4) Review & Create
+- `/apps/new` — Protocol router: reads `?type` query param and dispatches to the correct wizard — OIDC (default), SWA (`?type=swa`), or API Services (`?type=api`). OIDC path: 4 steps (Name/Type, Redirect URIs, Token Lifetimes, Review & Create).
+- `/apps/new?type=swa` — SWA wizard (AppNewSWA.tsx): 3 steps (App Details, Login Form Selectors: username/password/submit CSS selectors + shared-credentials toggle, Review & Create)
+- `/apps/new?type=api` — API Services M2M wizard (AppNewAPI.tsx): 3 steps (App Details, Scopes & Token Config: scope checkboxes + access-token lifetime slider, Review & Create → one-time client_secret reveal with copy/toggle)
 - `/apps/:appId` — App detail with OIDC config, integration snippets (Node/Python/Go), secret rotation workflow
 - `/workspaces` — Workspace list with realm info, create modal
 - `/workspaces/:id` — Workspace detail with tabs (Apps, Team, Realm endpoints)

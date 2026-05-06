@@ -213,7 +213,7 @@ export default function SAMLNew() {
           <CheckCircle2 className="h-12 w-12 text-emerald-500" />
           <p className="text-lg font-semibold text-foreground">Service provider registered</p>
           <p className="text-sm text-muted-foreground">
-            The SAML client has been created in your Keycloak realm. Redirecting…
+            The service provider has been registered in your workspace. Redirecting…
           </p>
         </div>
       </Layout>
@@ -234,7 +234,7 @@ export default function SAMLNew() {
       <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 flex items-start gap-3">
         <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
         <p className="text-sm text-blue-800">
-          This registers a SAML 2.0 Service Provider in your Keycloak realm. The SP will trust signed
+          This registers a SAML 2.0 Service Provider in your workspace. The SP will trust signed
           XML assertions issued by Foundry IAM. After registration, give your SP the{" "}
           <strong>IdP Metadata URL</strong> — it contains Foundry IAM's signing certificate and SSO
           endpoints.
@@ -505,7 +505,7 @@ export default function SAMLNew() {
             <div>
               <h3 className="text-sm font-semibold text-foreground">Attribute Mappings</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Map Keycloak user attributes to SAML assertion attributes. The SP reads these to
+                Map user identity attributes to SAML assertion attributes. The SP reads these to
                 identify and authorise the user.
               </p>
             </div>
@@ -521,7 +521,7 @@ export default function SAMLNew() {
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                    Keycloak attribute
+                    User attribute
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                     → SAML attribute name
@@ -614,7 +614,7 @@ export default function SAMLNew() {
             {canSubmit && (
               <div className="flex items-center gap-1.5 text-emerald-700">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                Ready to register — the SAML client will be created in your Keycloak realm
+                Ready to register — the service provider will be added to your workspace
                 immediately.
               </div>
             )}

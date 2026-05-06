@@ -88,11 +88,11 @@ export default function Signup() {
             Ship auth in&nbsp;30&nbsp;minutes,<br />not&nbsp;30&nbsp;days.
           </h1>
           <p className="text-slate-400 text-base leading-relaxed mb-8">
-            Enterprise-grade identity management powered by Keycloak — without the ops overhead.
+            Enterprise-grade identity management — without the ops overhead.
           </p>
           <div className="space-y-3">
             {[
-              "Dedicated Keycloak realm, zero shared infra",
+              "Dedicated identity domain, zero shared infra",
               "OIDC, SAML 2.0, SCIM &amp; federation out of the box",
               "Audit logs &amp; SOC 2-ready from day one",
               "Usage-based billing — free up to 1,000 MAU",
@@ -186,7 +186,7 @@ export default function Signup() {
                 placeholder="Acme Corp"
                 className="w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
               />
-              <p className="text-xs text-muted-foreground mt-1">A dedicated Keycloak realm will be provisioned for this organisation.</p>
+              <p className="text-xs text-muted-foreground mt-1">A dedicated identity workspace will be provisioned for this organisation.</p>
             </div>
 
             {/* Password */}
@@ -284,7 +284,7 @@ export default function Signup() {
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            By creating an account, a dedicated Keycloak realm will be provisioned for your organisation.
+            By creating an account, a dedicated identity workspace will be provisioned for your organisation.
             This takes approximately 30 seconds.
           </p>
         </div>

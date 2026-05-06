@@ -5,12 +5,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CopyButton } from "@/components/CopyButton";
 import { DetailNav } from "@/components/DetailNav";
 import { MOCK_WORKSPACES, MOCK_APPS, MOCK_ADMINS } from "@/lib/mockData";
-import { Layers, Cpu, Users, ExternalLink, Plus, ChevronRight } from "lucide-react";
+import { Layers, Cpu, Users, ExternalLink, Plus, ChevronRight, Copy, Check, Download } from "lucide-react";
 
 export default function WorkspaceDetail() {
   const { id } = useParams();
   const ws = MOCK_WORKSPACES.find(w => w.id === id);
   const [activeTab, setActiveTab] = useState<"apps" | "team" | "realm">("apps");
+  const [endpointsCopied, setEndpointsCopied] = useState(false);
 
   if (!ws) return (
     <Layout title="Workspace Not Found">
@@ -24,6 +25,35 @@ export default function WorkspaceDetail() {
 
   const wsApps = MOCK_APPS.filter(a => a.workspace_id === ws.id);
   const wsAdmins = MOCK_ADMINS.filter(a => a.workspace_id === ws.id);
+
+  function buildEndpointBlock() {
+    const issuer = ws.keycloak.issuer;
+    return [
+      `OIDC_ISSUER=${issuer}`,
+      `OIDC_JWKS_URI=${ws.keycloak.jwks_uri}`,
+      `OIDC_WELL_KNOWN=${ws.keycloak.well_known}`,
+      `OIDC_AUTH_ENDPOINT=${issuer}/protocol/openid-connect/auth`,
+      `OIDC_TOKEN_ENDPOINT=${issuer}/protocol/openid-connect/token`,
+      `OIDC_LOGOUT_ENDPOINT=${issuer}/protocol/openid-connect/logout`,
+      `OIDC_USERINFO_ENDPOINT=${issuer}/protocol/openid-connect/userinfo`,
+    ].join("\n");
+  }
+
+  function copyAllEndpoints() {
+    navigator.clipboard.writeText(buildEndpointBlock());
+    setEndpointsCopied(true);
+    setTimeout(() => setEndpointsCopied(false), 2000);
+  }
+
+  function downloadEnvFile() {
+    const blob = new Blob([buildEndpointBlock()], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${ws.keycloak.realm}.env`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   const TABS = [
     { id: "apps",  label: "Apps",  count: wsApps.length },
@@ -197,13 +227,36 @@ export default function WorkspaceDetail() {
       {/* Realm tab */}
       {activeTab === "realm" && (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border bg-muted/20">
-            <h3 className="text-sm font-semibold text-foreground">IAM Realm Configuration</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">These endpoints are used by your apps to obtain and validate tokens.</p>
+          <div className="px-5 py-4 border-b border-border bg-muted/20 flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">IAM Realm Configuration</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">These endpoints are used by your apps to obtain and validate tokens.</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={copyAllEndpoints}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  endpointsCopied
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                }`}
+              >
+                {endpointsCopied
+                  ? <><Check className="h-3.5 w-3.5" /> Copied!</>
+                  : <><Copy className="h-3.5 w-3.5" /> Copy all endpoints</>
+                }
+              </button>
+              <button
+                onClick={downloadEnvFile}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" /> Download .env
+              </button>
+            </div>
           </div>
           <div className="divide-y divide-border/60">
             {[
-              { label: "Realm name",     value: ws.keycloak.realm },
+              { label: "Identity domain", value: ws.keycloak.realm },
               { label: "Issuer",         value: ws.keycloak.issuer },
               { label: "JWKS URI",       value: ws.keycloak.jwks_uri },
               { label: "Well-known",     value: ws.keycloak.well_known },
